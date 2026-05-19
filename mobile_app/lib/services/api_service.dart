@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/risk_assessment.dart';
 
 /// Excepción tipada para errores de la API.
@@ -12,12 +13,8 @@ class ApiException implements Exception {
 }
 
 /// Servicio centralizado para todas las llamadas a la API Flask.
-/// La URL base es la única constante que debe modificarse al cambiar de entorno.
+/// La URL base se obtiene exclusivamente de [ApiConfig.baseUrl].
 class ApiService {
-  // Cambiar a la IP/host del servidor Flask según el entorno de ejecución.
-  // 10.0.2.2 es el alias que el emulador Android usa para localhost del host.
-  static const String _baseUrl = 'http://10.0.2.2:5000/api';
-
   static final http.Client _client = http.Client();
 
   static Map<String, String> get _headers => {
@@ -29,8 +26,8 @@ class ApiService {
   static Future<List<RiskAssessment>> fetchAssessments() async {
     try {
       final response = await _client
-          .get(Uri.parse('$_baseUrl/assessments'), headers: _headers)
-          .timeout(const Duration(seconds: 10));
+          .get(Uri.parse('${ApiConfig.baseUrl}/assessments'), headers: _headers)
+          .timeout(ApiConfig.requestTimeout);
 
       if (response.statusCode == 200) {
         final List<dynamic> body = jsonDecode(response.body) as List<dynamic>;
@@ -52,11 +49,11 @@ class ApiService {
     try {
       final response = await _client
           .post(
-            Uri.parse('$_baseUrl/assessments'),
+            Uri.parse('${ApiConfig.baseUrl}/assessments'),
             headers: _headers,
             body: jsonEncode(assessment.toJson()),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(ApiConfig.requestTimeout);
 
       if (response.statusCode == 201) {
         return RiskAssessment.fromJson(
@@ -78,11 +75,11 @@ class ApiService {
     try {
       final response = await _client
           .put(
-            Uri.parse('$_baseUrl/assessments/${assessment.id}'),
+            Uri.parse('${ApiConfig.baseUrl}/assessments/${assessment.id}'),
             headers: _headers,
             body: jsonEncode(assessment.toJson()),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(ApiConfig.requestTimeout);
 
       if (response.statusCode == 200) {
         return RiskAssessment.fromJson(
@@ -102,8 +99,8 @@ class ApiService {
   static Future<void> deleteAssessment(int id) async {
     try {
       final response = await _client
-          .delete(Uri.parse('$_baseUrl/assessments/$id'), headers: _headers)
-          .timeout(const Duration(seconds: 10));
+          .delete(Uri.parse('${ApiConfig.baseUrl}/assessments/$id'), headers: _headers)
+          .timeout(ApiConfig.requestTimeout);
 
       if (response.statusCode != 200) {
         final error = _extractError(response.body);

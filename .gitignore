@@ -238,3 +238,5 @@ mobile_app/ios/.symlinks/
 mobile_app/ios/Pods/
 mobile_app/**/*.g.dartclaude/
 .claude/
+.vscode/
+.claude/

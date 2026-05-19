@@ -1,2 +1,17 @@
-# tds-sentinel-mobile-final
-Final academic project - Full Stack mobile app with Flask, Flutter and SQLite
+# TDS Sentinel Backend API
+
+Backend desarrollado con Flask para la entrega final del sistema TDS Sentinel Mobile.
+
+## Tecnologías
+
+- Python
+- Flask
+- SQLite
+- Flask-CORS
+- API REST
+- JSON
+
+## Instalación
+
+```bash
+pip install -r requirements.txt

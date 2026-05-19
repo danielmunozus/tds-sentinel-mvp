@@ -236,4 +236,5 @@ mobile_app/android/.gradle/
 mobile_app/android/local.properties
 mobile_app/ios/.symlinks/
 mobile_app/ios/Pods/
-mobile_app/**/*.g.dart
+mobile_app/**/*.g.dartclaude/
+.claude/

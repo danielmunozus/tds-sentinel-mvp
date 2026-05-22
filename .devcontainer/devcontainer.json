@@ -1,6 +1,6 @@
 {
   "name": "TDS Sentinel MVP",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "image": "ghcr.io/cirruslabs/flutter:stable",
 
   "forwardPorts": [5000, 8080],
 
@@ -23,12 +23,7 @@
         "ms-python.python",
         "Dart-Code.flutter",
         "Dart-Code.dart-code"
-      ],
-      "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python3",
-        "editor.formatOnSave": true,
-        "editor.tabSize": 4
-      }
+      ]
     }
   }
 }

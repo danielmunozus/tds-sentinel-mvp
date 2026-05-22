@@ -143,3 +143,4 @@ Usuario completa checklist
 **Entrega:** Sumativa 4  
 **Stack:** Flask + SQLite + Flutter  
 **Empresa:** TDS Innovate — *Built secure. Built to scale.*
+**Desarrollador:** Daniel Munoz - hello@danielmunoz.us

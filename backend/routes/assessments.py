@@ -2,7 +2,7 @@
 routes/assessments.py — TDS Sentinel API
 Blueprint CRUD para evaluaciones de riesgo.
 
-POST   /assessments         → crear evaluación (calcula score + recomendaciones)
+POST   /assessments         → crear evaluación — requiere client_id
 GET    /assessments         → listar todas
 GET    /assessments/<id>    → detalle
 PUT    /assessments/<id>    → actualizar campos editables
@@ -138,11 +138,11 @@ def _validate_answers(pack_id: str, answers: dict) -> str | None:
 @assessments_bp.route("/assessments", methods=["POST"])
 def create_assessment():
     """
-    Recibe respuestas del cliente, calcula score y persiste la evaluación.
+    Recibe respuestas del usuario, calcula score y persiste la evaluación.
 
     Body esperado:
     {
-        "company_name":     "Demo Company",
+        "client_id":        1,
         "responsible_name": "IT Manager",
         "pack_id":          "infrastructure_basic",
         "answers": {
@@ -153,15 +153,30 @@ def create_assessment():
             "training": "no"
         }
     }
+    company_name se deriva automáticamente del cliente referenciado.
     """
     data = request.get_json(silent=True)
     if not data:
         return _error("El cuerpo de la solicitud debe ser JSON válido.", 400)
 
-    # Validar y sanitizar campos de texto
-    company_name, err = _sanitize_text(data.get("company_name", ""), "company_name")
-    if err:
-        return _error(err, 400)
+    # Validar client_id
+    client_id = data.get("client_id")
+    if not isinstance(client_id, int) or client_id <= 0:
+        return _error("El campo 'client_id' es requerido y debe ser un entero positivo.", 400)
+
+    # Verificar que el cliente existe y obtener su nombre
+    conn = get_db_connection()
+    try:
+        client_row = conn.execute(
+            "SELECT id, name FROM clients WHERE id = ?", (client_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not client_row:
+        return _error(f"Cliente {client_id} no encontrado.", 404)
+
+    company_name = client_row["name"]
 
     responsible_name, err = _sanitize_text(data.get("responsible_name", ""), "responsible_name")
     if err:
@@ -171,20 +186,16 @@ def create_assessment():
     if err:
         return _error(err, 400)
 
-    # Validar que el pack existe
     if not get_pack_by_id(pack_id):
         return _error(f"Pack '{pack_id}' no existe en el catálogo.", 400)
 
-    # Validar respuestas
     answers = data.get("answers")
     answers_error = _validate_answers(pack_id, answers)
     if answers_error:
         return _error(answers_error, 400)
 
-    # Normalizar respuestas a minúsculas
     answers_normalized = {k: v.strip().lower() for k, v in answers.items()}
 
-    # Calcular score y recomendaciones via risk engine
     try:
         score_result = calculate_risk_score(pack_id, answers_normalized)
         recommendations = generate_recommendations(pack_id, answers_normalized)
@@ -192,24 +203,23 @@ def create_assessment():
         logger.warning("Error en risk engine: %s", e)
         return _error(str(e), 400)
 
-    # Generar timestamp y hash de integridad
     created_at = datetime.now(timezone.utc).isoformat()
     assessment_hash = _generate_assessment_hash(
         company_name, pack_id, answers_normalized, created_at
     )
 
-    # Persistir en SQLite
     conn = get_db_connection()
     try:
         cursor = conn.execute(
             """
             INSERT INTO risk_assessments
-                (company_name, responsible_name, pack_id, answers_json,
+                (client_id, company_name, responsible_name, pack_id, answers_json,
                  score, risk_level, recommendations_json,
                  assessment_hash, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
             """,
             (
+                client_id,
                 company_name,
                 responsible_name,
                 pack_id,
@@ -230,8 +240,8 @@ def create_assessment():
         conn.close()
 
     logger.info(
-        "Assessment creado — id=%d company=%s level=%s score=%d",
-        new_id, company_name, score_result["risk_level"], score_result["score_display"]
+        "Assessment creado — id=%d client_id=%d level=%s score=%d",
+        new_id, client_id, score_result["risk_level"], score_result["score_display"],
     )
 
     return _success(_row_to_dict(row), 201)

@@ -1,14 +1,16 @@
 """
 app.py — TDS Sentinel API
 Punto de entrada principal. Flask + Blueprints + SQLite.
-Arquitectura: Flutter Mobile → REST API → Flask → SQLite
+Arquitectura: Flutter Web → Flask (static + API) → SQLite
 """
 
 import logging
 import os
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from config import Config
 from database import init_db
+
+FLUTTER_DIR = os.path.abspath(Config.FLUTTER_BUILD_DIR)
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 Config.validate()
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = Flask(__name__)
+app = Flask(__name__, static_folder=FLUTTER_DIR, static_url_path="")
 app.config["SECRET_KEY"] = Config.SECRET_KEY
 app.config["DEBUG"] = Config.DEBUG
 
@@ -63,7 +65,10 @@ def bad_request(e):
 
 @app.errorhandler(404)
 def not_found(e):
-    return error_response("Recurso no encontrado.", 404)
+    # Las rutas /api/* devuelven JSON; el resto sirve Flutter SPA.
+    if request.path.startswith(Config.API_PREFIX):
+        return error_response("Recurso no encontrado.", 404)
+    return send_from_directory(FLUTTER_DIR, "index.html")
 
 @app.errorhandler(405)
 def method_not_allowed(e):
@@ -77,9 +82,11 @@ def internal_error(e):
 # ── Blueprints ────────────────────────────────────────────────────────────────
 from routes.packs import packs_bp
 from routes.assessments import assessments_bp
+from routes.clients import clients_bp
 
 app.register_blueprint(packs_bp,       url_prefix=Config.API_PREFIX)
 app.register_blueprint(assessments_bp, url_prefix=Config.API_PREFIX)
+app.register_blueprint(clients_bp,     url_prefix=Config.API_PREFIX)
 
 # ── Health Check ──────────────────────────────────────────────────────────────
 @app.route(f"{Config.API_PREFIX}/health", methods=["GET"])
@@ -90,8 +97,24 @@ def health_check():
         "version": Config.API_VERSION,
     })
 
+# ── Flutter Web — ruta raíz y catch-all para SPA ─────────────────────────────
+@app.route("/")
+def serve_flutter():
+    return send_from_directory(FLUTTER_DIR, "index.html")
+
+@app.route("/<path:path>")
+def serve_flutter_assets(path):
+    # Archivos estáticos que existan se sirven directamente.
+    # Rutas de la SPA que no sean archivos devuelven index.html.
+    if path.startswith("api/"):
+        return error_response("Recurso no encontrado.", 404)
+    full = os.path.join(FLUTTER_DIR, path)
+    if os.path.isfile(full):
+        return send_from_directory(FLUTTER_DIR, path)
+    return send_from_directory(FLUTTER_DIR, "index.html")
+
 # ── Punto de entrada ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
-    logger.info("Iniciando %s en http://127.0.0.1:%d", Config.APP_NAME, port)
-    app.run(host="127.0.0.1", port=port, debug=Config.DEBUG)
+    logger.info("Iniciando %s en http://0.0.0.0:%d", Config.APP_NAME, port)
+    app.run(host="0.0.0.0", port=port, debug=Config.DEBUG)

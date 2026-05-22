@@ -32,6 +32,7 @@ class Recommendation {
 
 class RiskAssessment {
   final int id;
+  final int? clientId;
   final String companyName;
   final String responsibleName;
   final String packId;
@@ -45,6 +46,7 @@ class RiskAssessment {
 
   const RiskAssessment({
     required this.id,
+    this.clientId,
     required this.companyName,
     required this.responsibleName,
     required this.packId,
@@ -58,13 +60,11 @@ class RiskAssessment {
   });
 
   factory RiskAssessment.fromJson(Map<String, dynamic> json) {
-    // answers_json puede venir como Map ya deserializado
     final rawAnswers = json['answers_json'];
     final Map<String, String> answers = rawAnswers is Map
         ? rawAnswers.map((k, v) => MapEntry(k.toString(), v.toString()))
         : {};
 
-    // recommendations_json puede venir como List ya deserializada
     final rawRecs = json['recommendations_json'];
     final List<Recommendation> recs = rawRecs is List
         ? rawRecs
@@ -74,6 +74,7 @@ class RiskAssessment {
 
     return RiskAssessment(
       id:               (json['id'] as num).toInt(),
+      clientId:         json['client_id'] != null ? (json['client_id'] as num).toInt() : null,
       companyName:      json['company_name'] as String,
       responsibleName:  json['responsible_name'] as String,
       packId:           json['pack_id'] as String,

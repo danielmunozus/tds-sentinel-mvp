@@ -4,10 +4,9 @@ import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 import '../models/risk_assessment.dart';
 import '../widgets/assessment_card.dart';
-import '../widgets/risk_badge.dart';
-import 'assessment_form_screen.dart';
 import 'assessment_history_screen.dart';
 import 'assessment_result_screen.dart';
+import 'client_selection_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,16 +37,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _goToForm() async {
-    final result = await Navigator.push<RiskAssessment>(
+  void _goToForm() {
+    Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AssessmentFormScreen()),
-    );
-    if (result != null && mounted) {
-      Navigator.push(context,
-        MaterialPageRoute(builder: (_) => AssessmentResultScreen(assessment: result)));
-      _loadRecent();
-    }
+      MaterialPageRoute(builder: (_) => const ClientSelectionScreen()),
+    ).then((_) => _loadRecent());
   }
 
   Future<void> _confirmDelete(RiskAssessment a) async {

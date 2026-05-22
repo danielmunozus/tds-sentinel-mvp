@@ -2,18 +2,29 @@
 // Configuración centralizada de la API.
 // Nunca dispersar URLs de endpoints en los screens.
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 class ApiConfig {
-  ApiConfig._(); // Clase no instanciable
+  ApiConfig._();
 
-  static const String baseUrl = 'https://solid-cod-v6g47jv7qvxjhp996-5000.app.github.dev/api';
+  // En web usa el mismo host que sirve la app (same-origin).
+  // En móvil/desktop apunta a localhost para desarrollo.
+  static String get baseUrl {
+    if (kIsWeb) {
+      final uri = Uri.base;
+      final port = uri.hasPort ? ':${uri.port}' : '';
+      return '${uri.scheme}://${uri.host}$port/api';
+    }
+    return 'http://localhost:5000/api';
+  }
 
-  // Endpoints
-  static const String health      = '$baseUrl/health';
-  static const String packs       = '$baseUrl/packs';
-  static const String assessments = '$baseUrl/assessments';
+  static String get health      => '$baseUrl/health';
+  static String get packs       => '$baseUrl/packs';
+  static String get clients     => '$baseUrl/clients';
+  static String get assessments => '$baseUrl/assessments';
 
+  static String clientById(int id)     => '$clients/$id';
   static String assessmentById(int id) => '$assessments/$id';
 
-  // Timeout para requests HTTP
   static const Duration requestTimeout = Duration(seconds: 15);
 }

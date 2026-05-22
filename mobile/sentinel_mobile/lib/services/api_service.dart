@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/assessment_pack.dart';
+import '../models/client.dart';
 import '../models/risk_assessment.dart';
 
 // Excepción tipada para errores de API
@@ -64,6 +65,84 @@ class ApiService {
     }
   }
 
+  // ── Clients ────────────────────────────────────────────────────────────────
+
+  Future<List<Client>> fetchClients() async {
+    try {
+      final response = await _client
+          .get(Uri.parse(ApiConfig.clients), headers: _headers)
+          .timeout(ApiConfig.requestTimeout);
+      final data = _processResponse(response) as List<dynamic>;
+      return data
+          .map((c) => Client.fromJson(c as Map<String, dynamic>))
+          .toList();
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('No se pudo cargar la lista de clientes.');
+    }
+  }
+
+  Future<Client> createClient({
+    required String name,
+    String? contactName,
+    String? email,
+    String? industry,
+  }) async {
+    if (name.trim().isEmpty) throw const ApiException('El nombre del cliente es requerido.');
+    try {
+      final body = json.encode({
+        'name':         name.trim(),
+        if (contactName != null && contactName.trim().isNotEmpty)
+          'contact_name': contactName.trim(),
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        if (industry != null && industry.trim().isNotEmpty) 'industry': industry.trim(),
+      });
+      final response = await _client
+          .post(Uri.parse(ApiConfig.clients), headers: _headers, body: body)
+          .timeout(ApiConfig.requestTimeout);
+      final data = _processResponse(response) as Map<String, dynamic>;
+      return Client.fromJson(data);
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('No se pudo crear el cliente.');
+    }
+  }
+
+  Future<Client> updateClient(int id, {String? name, String? contactName, String? email, String? industry}) async {
+    try {
+      final payload = <String, String>{};
+      if (name != null && name.trim().isNotEmpty) payload['name'] = name.trim();
+      if (contactName != null) payload['contact_name'] = contactName.trim();
+      if (email != null) payload['email'] = email.trim();
+      if (industry != null) payload['industry'] = industry.trim();
+      if (payload.isEmpty) throw const ApiException('No hay campos para actualizar.');
+      final response = await _client
+          .put(Uri.parse(ApiConfig.clientById(id)), headers: _headers, body: json.encode(payload))
+          .timeout(ApiConfig.requestTimeout);
+      final data = _processResponse(response) as Map<String, dynamic>;
+      return Client.fromJson(data);
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('No se pudo actualizar el cliente.');
+    }
+  }
+
+  Future<void> deleteClient(int id) async {
+    try {
+      final response = await _client
+          .delete(Uri.parse(ApiConfig.clientById(id)), headers: _headers)
+          .timeout(ApiConfig.requestTimeout);
+      _processResponse(response);
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('No se pudo eliminar el cliente.');
+    }
+  }
+
   // ── Packs ──────────────────────────────────────────────────────────────────
 
   Future<List<AssessmentPack>> fetchPacks() async {
@@ -115,19 +194,17 @@ class ApiService {
   }
 
   Future<RiskAssessment> createAssessment({
-    required String companyName,
+    required int clientId,
     required String responsibleName,
     required String packId,
     required Map<String, String> answers,
   }) async {
-    // Validación básica antes de enviar (el backend también valida)
-    if (companyName.trim().isEmpty) throw const ApiException('El nombre de empresa es requerido.');
     if (responsibleName.trim().isEmpty) throw const ApiException('El nombre del responsable es requerido.');
     if (answers.isEmpty) throw const ApiException('Debe responder al menos un control.');
 
     try {
       final body = json.encode({
-        'company_name':     companyName.trim(),
+        'client_id':        clientId,
         'responsible_name': responsibleName.trim(),
         'pack_id':          packId,
         'answers':          answers,

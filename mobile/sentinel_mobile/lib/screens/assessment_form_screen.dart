@@ -1,13 +1,15 @@
 // lib/screens/assessment_form_screen.dart — TDS Sentinel
 import 'package:flutter/material.dart';
 import '../models/assessment_pack.dart';
-import '../models/risk_assessment.dart';
+import '../models/client.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/control_answer_selector.dart';
 
 class AssessmentFormScreen extends StatefulWidget {
-  const AssessmentFormScreen({super.key});
+  final Client client;
+
+  const AssessmentFormScreen({super.key, required this.client});
 
   @override
   State<AssessmentFormScreen> createState() => _AssessmentFormScreenState();
@@ -15,7 +17,6 @@ class AssessmentFormScreen extends StatefulWidget {
 
 class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _companyCtrl = TextEditingController();
   final _responsibleCtrl = TextEditingController();
 
   List<AssessmentPack> _packs = [];
@@ -34,7 +35,6 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
 
   @override
   void dispose() {
-    _companyCtrl.dispose();
     _responsibleCtrl.dispose();
     super.dispose();
   }
@@ -59,7 +59,6 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
 
   bool get _canSubmit =>
       !_submitting &&
-      _companyCtrl.text.trim().isNotEmpty &&
       _responsibleCtrl.text.trim().isNotEmpty &&
       _selectedPack != null &&
       _answeredCount == _totalControls;
@@ -75,7 +74,7 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
     setState(() => _submitting = true);
     try {
       final result = await ApiService.instance.createAssessment(
-        companyName:     _companyCtrl.text.trim(),
+        clientId:        widget.client.id,
         responsibleName: _responsibleCtrl.text.trim(),
         packId:          _selectedPack!.id,
         answers:         Map.from(_answers),
@@ -121,18 +120,42 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // Section: Datos de la empresa
-          const _SectionHeader(title: 'Datos de la empresa', icon: Icons.business_rounded),
+          // Cliente seleccionado (solo lectura)
+          const _SectionHeader(title: 'Cliente', icon: Icons.business_rounded),
           const SizedBox(height: 12),
-          TextFormField(
-            controller: _companyCtrl,
-            decoration: const InputDecoration(labelText: 'Nombre de la empresa'),
-            textCapitalization: TextCapitalization.words,
-            maxLength: 200,
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
-            onChanged: (_) => setState(() {}),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.navyDark.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    color: AppColors.coreGreen, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.client.name,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMain)),
+                      if (widget.client.contactName != null)
+                        Text(widget.client.contactName!,
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _responsibleCtrl,
             decoration: const InputDecoration(labelText: 'Nombre del responsable'),

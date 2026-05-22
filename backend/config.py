@@ -28,6 +28,13 @@ class Config:
         os.path.join(os.path.dirname(__file__), "sentinel.db")
     )
 
+    # ── Flutter Web ────────────────────────────────────────────────────────
+    # Ruta al build release de Flutter. Se puede sobreescribir con FLUTTER_BUILD_DIR.
+    FLUTTER_BUILD_DIR: str = os.getenv(
+        "FLUTTER_BUILD_DIR",
+        os.path.join(os.path.dirname(__file__), "..", "mobile", "sentinel_mobile", "build", "web")
+    )
+
     # ── CORS ───────────────────────────────────────────────────────────────
     # Lista blanca de orígenes permitidos. Separados por coma en el .env.
     # Ejemplo: CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:5001

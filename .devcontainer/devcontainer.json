@@ -1,9 +1,10 @@
 {
   "name": "TDS Sentinel MVP",
   "image": "ghcr.io/cirruslabs/flutter:stable",
-
-  "forwardPorts": [5000, 8080],
-
+  "forwardPorts": [
+    5000,
+    8080
+  ],
   "portsAttributes": {
     "5000": {
       "label": "Sentinel API",
@@ -14,9 +15,7 @@
       "onAutoForward": "notify"
     }
   },
-
-  "postCreateCommand": "bash .devcontainer/setup.sh",
-
+  "postCreateCommand": "pip install -r /workspaces/tds-sentinel-mvp/backend/requirements.txt && cd /workspaces/tds-sentinel-mvp/backend && cp .env.example .env && python3 -c \"import secrets; key=secrets.token_hex(32); content=open('.env').read().replace('REEMPLAZA_CON_UN_VALOR_SECRETO_SEGURO', key); open('.env','w').write(content)\" && cd /workspaces/tds-sentinel-mvp/mobile/sentinel_mobile && flutter pub get && echo 'Setup completado'",
   "customizations": {
     "vscode": {
       "extensions": [

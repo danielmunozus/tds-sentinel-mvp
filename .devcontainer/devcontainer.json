@@ -17,7 +17,7 @@
     }
   },
   "postCreateCommand": "/usr/bin/python3 -m pip install -r /workspaces/tds-sentinel-mvp/backend/requirements.txt --break-system-packages -q && cd /workspaces/tds-sentinel-mvp/backend && cp .env.example .env && /usr/bin/python3 -c \"import secrets; key=secrets.token_hex(32); content=open('.env').read().replace('REEMPLAZA_CON_UN_VALOR_SECRETO_SEGURO', key); open('.env','w').write(content)\" && cd /workspaces/tds-sentinel-mvp/mobile/sentinel_mobile && flutter pub get && echo 'Setup completado'",
-  "postStartCommand": "cd /workspaces/tds-sentinel-mvp/backend && nohup /usr/bin/python3 app.py > /tmp/flask.log 2>&1 &",
+  "postStartCommand": "cd /workspaces/tds-sentinel-mvp/backend && nohup /usr/bin/python3 app.py > /tmp/flask.log 2>&1 & sleep 3 && gh codespace ports visibility 5000:public -c $CODESPACE_NAME 2>/dev/null && echo '🌐 Puerto 5000 → público' || true",
   "customizations": {
     "vscode": {
       "extensions": [

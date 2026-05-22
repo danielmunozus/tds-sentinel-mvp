@@ -137,11 +137,12 @@ Usuario completa checklist
 
 ---
 
-## Proyecto académico
+## Equipo
 
-**Asignatura:** Taller de Desarrollo Web y Móvil  
-**Entrega:** Sumativa 4  
-**Stack:** Flask + SQLite + Flutter  
 **Empresa:** TDS Innovate — *Built secure. Built to scale.*
-**Desarrollador:** Daniel Munoz - hello@danielmunoz.us
+**Desarrollador:** Daniel Munoz · hello@danielmunoz.us
+**Asignatura:** Taller de Desarrollo Web y Móvil · Sumativa 4  
+**Stack:** Flask + SQLite + Flutter  
+
+
 

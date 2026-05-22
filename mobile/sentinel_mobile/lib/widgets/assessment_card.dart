@@ -95,7 +95,7 @@ class _ScoreBar extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Score', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+              const Text('Score', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
               Text('$score/100', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
             ],
           ),

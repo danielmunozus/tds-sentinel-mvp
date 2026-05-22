@@ -93,7 +93,7 @@ class _ScoreCircle extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         children: [
@@ -109,7 +109,7 @@ class _ScoreCircle extends StatelessWidget {
               children: [
                 Text('${assessment.scoreInt}',
                   style: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: color)),
-                Text('/100', style: TextStyle(fontSize: 13, color: color.withOpacity(0.7))),
+                Text('/100', style: TextStyle(fontSize: 13, color: color.withValues(alpha: 0.7))),
               ],
             ),
           ),
@@ -216,7 +216,7 @@ class _AllGoodBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.riskLowBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.riskLow.withOpacity(0.3)),
+        border: Border.all(color: AppColors.riskLow.withValues(alpha: 0.3)),
       ),
       child: const Row(
         children: [

@@ -26,7 +26,7 @@ class ControlAnswerSelector extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: selectedAnswer != null
-              ? AppColors.navyDark.withOpacity(0.3)
+              ? AppColors.navyDark.withValues(alpha: 0.3)
               : AppColors.divider,
         ),
       ),
@@ -76,7 +76,7 @@ class _AnswerChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.12) : AppColors.surface,
+          color: isSelected ? color.withValues(alpha: 0.12) : AppColors.surface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? color : AppColors.divider,

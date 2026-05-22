@@ -78,7 +78,7 @@ class ApiService {
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('No se pudo conectar con el servidor. Verifica que la API esté corriendo.');
+      throw const ApiException('No se pudo conectar con el servidor. Verifica que la API esté corriendo.');
     }
   }
 
@@ -96,7 +96,7 @@ class ApiService {
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('No se pudo cargar el historial de evaluaciones.');
+      throw const ApiException('No se pudo cargar el historial de evaluaciones.');
     }
   }
 
@@ -110,7 +110,7 @@ class ApiService {
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('No se pudo cargar la evaluación.');
+      throw const ApiException('No se pudo cargar la evaluación.');
     }
   }
 
@@ -121,9 +121,9 @@ class ApiService {
     required Map<String, String> answers,
   }) async {
     // Validación básica antes de enviar (el backend también valida)
-    if (companyName.trim().isEmpty) throw ApiException('El nombre de empresa es requerido.');
-    if (responsibleName.trim().isEmpty) throw ApiException('El nombre del responsable es requerido.');
-    if (answers.isEmpty) throw ApiException('Debe responder al menos un control.');
+    if (companyName.trim().isEmpty) throw const ApiException('El nombre de empresa es requerido.');
+    if (responsibleName.trim().isEmpty) throw const ApiException('El nombre del responsable es requerido.');
+    if (answers.isEmpty) throw const ApiException('Debe responder al menos un control.');
 
     try {
       final body = json.encode({
@@ -140,7 +140,7 @@ class ApiService {
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('No se pudo crear la evaluación. Verifica tu conexión.');
+      throw const ApiException('No se pudo crear la evaluación. Verifica tu conexión.');
     }
   }
 
@@ -157,7 +157,7 @@ class ApiService {
       if (responsibleName != null && responsibleName.trim().isNotEmpty) {
         payload['responsible_name'] = responsibleName.trim();
       }
-      if (payload.isEmpty) throw ApiException('No hay campos para actualizar.');
+      if (payload.isEmpty) throw const ApiException('No hay campos para actualizar.');
 
       final response = await _client
           .put(Uri.parse(ApiConfig.assessmentById(id)),
@@ -168,7 +168,7 @@ class ApiService {
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('No se pudo actualizar la evaluación.');
+      throw const ApiException('No se pudo actualizar la evaluación.');
     }
   }
 
@@ -181,7 +181,7 @@ class ApiService {
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('No se pudo eliminar la evaluación.');
+      throw const ApiException('No se pudo eliminar la evaluación.');
     }
   }
 }

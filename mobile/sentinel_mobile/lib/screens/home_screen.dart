@@ -73,8 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
             const SnackBar(content: Text('Evaluación eliminada'), backgroundColor: AppColors.navyDark));
         }
       } on ApiException catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message), backgroundColor: AppColors.riskHigh));
+        }
       }
     }
   }
@@ -118,9 +120,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Icon(Icons.shield_rounded, color: AppColors.white, size: 20),
           ),
           const SizedBox(width: 10),
-          Column(
+          const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text('TDS Sentinel',
                 style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w700)),
               Text('Plataforma de Riesgo',
@@ -131,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             width: 36, height: 36,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.notifications_none_rounded, color: Colors.white70, size: 20),
@@ -244,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
       backgroundColor: AppColors.cardBg,
-      indicatorColor: AppColors.navyDark.withOpacity(0.08),
+      indicatorColor: AppColors.navyDark.withValues(alpha: 0.08),
       destinations: const [
         NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Inicio'),
         NavigationDestination(icon: Icon(Icons.history_rounded), label: 'Historial'),
@@ -292,11 +294,11 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32),
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 32),
       child: Center(
         child: Column(
-          children: const [
+          children: [
             Icon(Icons.shield_outlined, size: 48, color: AppColors.divider),
             SizedBox(height: 12),
             Text('Sin evaluaciones aún', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),

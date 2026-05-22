@@ -83,8 +83,10 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
       if (mounted) Navigator.pop(context, result);
     } on ApiException catch (e) {
       setState(() => _submitting = false);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message), backgroundColor: AppColors.riskHigh));
+      }
     }
   }
 
@@ -120,7 +122,7 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
         padding: const EdgeInsets.all(20),
         children: [
           // Section: Datos de la empresa
-          _SectionHeader(title: 'Datos de la empresa', icon: Icons.business_rounded),
+          const _SectionHeader(title: 'Datos de la empresa', icon: Icons.business_rounded),
           const SizedBox(height: 12),
           TextFormField(
             controller: _companyCtrl,
@@ -142,11 +144,11 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
           const SizedBox(height: 24),
 
           // Section: Pack selection
-          _SectionHeader(title: 'Pack de evaluación', icon: Icons.inventory_2_rounded),
+          const _SectionHeader(title: 'Pack de evaluación', icon: Icons.inventory_2_rounded),
           const SizedBox(height: 12),
           if (_packs.length > 1)
             DropdownButtonFormField<AssessmentPack>(
-              value: _selectedPack,
+              initialValue: _selectedPack,
               decoration: const InputDecoration(labelText: 'Seleccionar pack'),
               items: _packs.map((p) => DropdownMenuItem(
                 value: p,
@@ -161,7 +163,7 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.navyDark.withOpacity(0.05),
+                color: AppColors.navyDark.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.divider),
               ),
@@ -184,7 +186,7 @@ class _AssessmentFormScreenState extends State<AssessmentFormScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _SectionHeader(title: 'Controles de seguridad', icon: Icons.checklist_rounded),
+                const _SectionHeader(title: 'Controles de seguridad', icon: Icons.checklist_rounded),
                 Text('$_answeredCount / $_totalControls',
                   style: TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w600,

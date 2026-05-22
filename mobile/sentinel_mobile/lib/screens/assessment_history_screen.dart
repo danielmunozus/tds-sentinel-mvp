@@ -65,12 +65,16 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
       try {
         await ApiService.instance.deleteAssessment(a.id);
         setState(() => _assessments.removeWhere((x) => x.id == a.id));
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Evaluación eliminada'),
             backgroundColor: AppColors.navyDark));
+        }
       } on ApiException catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.message), backgroundColor: AppColors.riskHigh));
+        }
       }
     }
   }
@@ -121,10 +125,10 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
+        children: [
           Icon(Icons.history_rounded, size: 56, color: AppColors.divider),
           SizedBox(height: 16),
           Text('Sin evaluaciones', style: TextStyle(fontSize: 16,

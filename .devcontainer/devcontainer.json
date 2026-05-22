@@ -8,7 +8,8 @@
   "portsAttributes": {
     "5000": {
       "label": "Sentinel API",
-      "onAutoForward": "notify"
+      "onAutoForward": "openBrowser",
+      "visibility": "public"
     },
     "8080": {
       "label": "Flutter Web",

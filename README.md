@@ -1,7 +1,7 @@
 # TDS Sentinel — Cybersecurity Risk Intelligence Platform
 
 > **Built secure. Built to scale.**  
-> Plataforma académica de evaluación de riesgos de ciberseguridad para PYMEs.
+> Plataforma de evaluación de riesgos de ciberseguridad para PYMEs.
 
 ---
 

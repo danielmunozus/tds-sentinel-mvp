@@ -7,7 +7,7 @@
 
 ## ¿Qué es TDS Sentinel?
 
-TDS Sentinel permite a consultores y empresas evaluar su nivel de riesgo de ciberseguridad mediante cuestionarios de controles ponderados. El sistema calcula un score automatizado, determina el nivel de riesgo y genera recomendaciones priorizadas.
+TDS Sentinel permite a empresas evaluar su nivel de riesgo de ciberseguridad mediante cuestionarios de controles ponderados. El sistema calcula un score automatizado, determina el nivel de riesgo y genera recomendaciones priorizadas por consultores de TDS Innovate LLC.
 
 ---
 
@@ -144,3 +144,4 @@ Usuario completa checklist
 **Stack:** Flask + SQLite + Flutter  
 **Empresa:** TDS Innovate — *Built secure. Built to scale.*
 **Desarrollador:** Daniel Munoz - hello@danielmunoz.us
+

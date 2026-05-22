@@ -2,6 +2,7 @@
 // Capa de servicio HTTP. Toda comunicación con Flask pasa por aquí.
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/assessment_pack.dart';
@@ -21,7 +22,13 @@ class ApiService {
   ApiService._();
   static final ApiService instance = ApiService._();
 
-  final http.Client _http = http.Client();
+  http.Client _http = http.Client();
+
+  /// Permite inyectar un [http.Client] alternativo en tests.
+  /// No usar fuera de tests (anotado con @visibleForTesting).
+  @visibleForTesting
+  // ignore: avoid_setters_without_getters
+  set httpClientForTesting(http.Client client) => _http = client;
 
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',

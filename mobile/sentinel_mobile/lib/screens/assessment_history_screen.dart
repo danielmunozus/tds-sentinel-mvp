@@ -1,5 +1,6 @@
 // lib/screens/assessment_history_screen.dart — TDS Sentinel
 import 'package:flutter/material.dart';
+import '../models/app_state.dart';
 import '../models/risk_assessment.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
@@ -27,7 +28,8 @@ class _AssessmentHistoryScreenState extends State<AssessmentHistoryScreen> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final data = await ApiService.instance.fetchAssessments();
+      final data = await ApiService.instance
+          .fetchClientAssessments(AppState.instance.client!.id);
       setState(() { _assessments = data; _loading = false; });
     } on ApiException catch (e) {
       setState(() { _error = e.message; _loading = false; });

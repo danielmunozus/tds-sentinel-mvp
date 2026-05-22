@@ -108,6 +108,66 @@ _ASSESSMENT_PACKS: dict[str, dict[str, Any]] = {
         ],
     },
 
+    "network_security": {
+        "id":          "network_security",
+        "name":        "Network Security Assessment",
+        "description": "Evaluación de controles de seguridad de red para "
+                       "organizaciones con infraestructura crítica de conectividad.",
+        "version":     "1.0",
+        "controls": [
+            {
+                "id":             "perimeter_firewall",
+                "question":       "¿La organización cuenta con un firewall perimetral "
+                                  "correctamente configurado con reglas de denegación por defecto?",
+                "weight":         25,
+                "recommendation": "Implemente un NGFW (Next-Generation Firewall) con inspección "
+                                  "profunda de paquetes. Establezca una política de denegación "
+                                  "por defecto y documente cada regla activa con su justificación "
+                                  "de negocio. Revise y audite las reglas trimestralmente.",
+            },
+            {
+                "id":             "network_segmentation",
+                "question":       "¿La red está segmentada en zonas (DMZ, producción, usuarios, "
+                                  "invitados) con controles de acceso entre segmentos?",
+                "weight":         25,
+                "recommendation": "Implemente segmentación de red mediante VLANs y micro-segmentación. "
+                                  "Separe al menos: red de servidores, red de usuarios, DMZ y red de "
+                                  "invitados. Controle el tráfico inter-VLAN con listas de acceso o "
+                                  "firewalls internos. Aplique el principio de mínimo privilegio.",
+            },
+            {
+                "id":             "vpn",
+                "question":       "¿El acceso remoto a la red corporativa se realiza exclusivamente "
+                                  "mediante VPN con autenticación robusta?",
+                "weight":         20,
+                "recommendation": "Implemente una solución VPN empresarial (IPSec/SSL) con MFA "
+                                  "obligatorio. Elimine cualquier acceso RDP o SSH directo desde "
+                                  "internet. Registre todas las sesiones VPN y configure alertas "
+                                  "por accesos inusuales. Considere arquitectura Zero Trust.",
+            },
+            {
+                "id":             "traffic_monitoring",
+                "question":       "¿La organización monitorea activamente el tráfico de red "
+                                  "para detectar anomalías y actividad sospechosa en tiempo real?",
+                "weight":         15,
+                "recommendation": "Implemente un sistema IDS/IPS y herramientas de análisis de "
+                                  "flujo de red (NetFlow, sFlow). Configure alertas para tráfico "
+                                  "anómalo: conexiones a IPs maliciosas, exfiltración de datos, "
+                                  "escaneos de puertos. Integre con un SIEM para correlación.",
+            },
+            {
+                "id":             "security_logs",
+                "question":       "¿Los dispositivos de red generan logs de seguridad centralizados, "
+                                  "retenidos por al menos 90 días y revisados periódicamente?",
+                "weight":         15,
+                "recommendation": "Configure logging centralizado en todos los dispositivos de red. "
+                                  "Use un servidor Syslog o SIEM. Retenga logs por mínimo 90 días "
+                                  "(preferiblemente 1 año para compliance). Establezca revisión "
+                                  "semanal y alertas automáticas por patrones anómalos.",
+            },
+        ],
+    },
+
 }
 
 

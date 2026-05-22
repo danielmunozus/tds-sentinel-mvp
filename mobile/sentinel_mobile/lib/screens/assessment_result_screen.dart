@@ -154,9 +154,8 @@ class _MetaCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _Row(label: 'Empresa',     value: assessment.companyName),
-            _Row(label: 'Responsable', value: assessment.responsibleName),
-            _Row(label: 'Pack',        value: _packLabel(assessment.packId)),
+            _Row(label: 'Empresa', value: assessment.companyName),
+            _Row(label: 'Pack',    value: _packLabel(assessment.packId)),
             _Row(label: 'Fecha',       value: _formatDate(assessment.createdAt)),
             _Row(label: 'Controles',   value: '${assessment.answers.length} evaluados'),
           ],
@@ -166,7 +165,10 @@ class _MetaCard extends StatelessWidget {
   }
 
   String _packLabel(String id) {
-    const labels = {'infrastructure_basic': 'Infrastructure Basic Security'};
+    const labels = {
+      'infrastructure_basic': 'Infrastructure Basic Security',
+      'network_security':     'Network Security',
+    };
     return labels[id] ?? id;
   }
 

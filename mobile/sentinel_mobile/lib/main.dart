@@ -3,7 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
-import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
 
 void main() {
   runApp(const SentinelApp());
@@ -18,7 +18,7 @@ class SentinelApp extends StatelessWidget {
       title: 'TDS Sentinel',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.theme,
-      home: const HomeScreen(),
+      home: const LoginScreen(),
     );
   }
 }

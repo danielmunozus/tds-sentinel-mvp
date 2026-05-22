@@ -1,12 +1,14 @@
 // lib/screens/home_screen.dart — TDS Sentinel
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import '../services/api_service.dart';
+import '../models/app_state.dart';
 import '../models/risk_assessment.dart';
+import '../services/api_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/assessment_card.dart';
 import 'assessment_history_screen.dart';
 import 'assessment_result_screen.dart';
-import 'client_selection_screen.dart';
+import 'login_screen.dart';
+import 'pack_selection_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,20 +30,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadRecent() async {
+    final clientId = AppState.instance.client?.id;
+    if (clientId == null) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final all = await ApiService.instance.fetchAssessments();
+      final all = await ApiService.instance.fetchClientAssessments(clientId);
       setState(() { _recent = all.take(3).toList(); _loading = false; });
     } on ApiException catch (e) {
       setState(() { _error = e.message; _loading = false; });
     }
   }
 
-  void _goToForm() {
+  void _goToNewAssessment() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ClientSelectionScreen()),
+      MaterialPageRoute(builder: (_) => const PackSelectionScreen()),
     ).then((_) => _loadRecent());
+  }
+
+  void _logout() {
+    AppState.instance.logout();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
   }
 
   Future<void> _confirmDelete(RiskAssessment a) async {
@@ -51,10 +64,12 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Eliminar evaluación'),
         content: Text('¿Eliminar la evaluación de ${a.companyName}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Eliminar', style: TextStyle(color: AppColors.riskHigh))),
+            child: const Text('Eliminar',
+                style: TextStyle(color: AppColors.riskHigh))),
         ],
       ),
     );
@@ -64,12 +79,14 @@ class _HomeScreenState extends State<HomeScreen> {
         _loadRecent();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Evaluación eliminada'), backgroundColor: AppColors.navyDark));
+            const SnackBar(content: Text('Evaluación eliminada'),
+                backgroundColor: AppColors.navyDark));
         }
       } on ApiException catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: AppColors.riskHigh));
+            SnackBar(content: Text(e.message),
+                backgroundColor: AppColors.riskHigh));
         }
       }
     }
@@ -100,37 +117,44 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
+    final client = AppState.instance.client;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 16, 16, 20),
       child: Row(
         children: [
-          // Logo TDS icon placeholder (blanco sobre navy)
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.coreGreen,
-              borderRadius: BorderRadius.circular(8),
+          Image.asset(
+            'assets/icons/__TDS ICON (Color).png',
+            height: 36,
+            errorBuilder: (_, __, ___) => Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.coreGreen,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.shield_rounded,
+                  color: AppColors.white, size: 20),
             ),
-            child: const Icon(Icons.shield_rounded, color: AppColors.white, size: 20),
           ),
           const SizedBox(width: 10),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('TDS Sentinel',
-                style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-              Text('Plataforma de Riesgo',
-                style: TextStyle(color: Colors.white54, fontSize: 11)),
-            ],
-          ),
-          const Spacer(),
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('TDS Sentinel',
+                  style: TextStyle(color: AppColors.white,
+                      fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(client?.companyName ?? '',
+                  style: const TextStyle(color: Colors.white60, fontSize: 11),
+                  overflow: TextOverflow.ellipsis),
+              ],
             ),
-            child: const Icon(Icons.notifications_none_rounded, color: Colors.white70, size: 20),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded,
+                color: Colors.white70, size: 20),
+            tooltip: 'Cerrar sesión',
+            onPressed: _logout,
           ),
         ],
       ),
@@ -144,12 +168,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // Stat summary
           _buildStatsRow(),
           const SizedBox(height: 20),
-          // CTA button
           ElevatedButton.icon(
-            onPressed: _goToForm,
+            onPressed: _goToNewAssessment,
             icon: const Icon(Icons.add_rounded),
             label: const Text('Nueva Evaluación'),
             style: ElevatedButton.styleFrom(
@@ -158,16 +180,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          // Recent evaluations
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Evaluaciones recientes',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textMain)),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                    color: AppColors.textMain)),
               TextButton(
                 onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AssessmentHistoryScreen())).then((_) => _loadRecent()),
-                child: const Text('Ver todas', style: TextStyle(fontSize: 12, color: AppColors.navyDark)),
+                    MaterialPageRoute(
+                        builder: (_) => const AssessmentHistoryScreen()))
+                    .then((_) => _loadRecent()),
+                child: const Text('Ver todas',
+                    style: TextStyle(fontSize: 12, color: AppColors.navyDark)),
               ),
             ],
           ),
@@ -179,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatsRow() {
-    final total = _recent.length;
+    final total  = _recent.length;
     final levels = _recent.map((a) => a.riskLevel).toList();
 
     return Row(
@@ -207,7 +232,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_loading) {
       return const Center(child: Padding(
         padding: EdgeInsets.all(32),
-        child: CircularProgressIndicator(color: AppColors.navyDark, strokeWidth: 2),
+        child: CircularProgressIndicator(
+            color: AppColors.navyDark, strokeWidth: 2),
       ));
     }
     if (_error != null) {
@@ -220,7 +246,8 @@ class _HomeScreenState extends State<HomeScreen> {
       children: _recent.map((a) => AssessmentCard(
         assessment: a,
         onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => AssessmentResultScreen(assessment: a))),
+            MaterialPageRoute(
+                builder: (_) => AssessmentResultScreen(assessment: a))),
         onDelete: () => _confirmDelete(a),
       )).toList(),
     );
@@ -232,9 +259,10 @@ class _HomeScreenState extends State<HomeScreen> {
       onDestinationSelected: (i) {
         if (i == 1) {
           Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const AssessmentHistoryScreen())).then((_) => _loadRecent());
+              MaterialPageRoute(builder: (_) => const AssessmentHistoryScreen()))
+              .then((_) => _loadRecent());
         } else if (i == 2) {
-          _goToForm();
+          _goToNewAssessment();
         } else {
           setState(() => _navIndex = i);
         }
@@ -242,9 +270,12 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: AppColors.cardBg,
       indicatorColor: AppColors.navyDark.withValues(alpha: 0.08),
       destinations: const [
-        NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Inicio'),
-        NavigationDestination(icon: Icon(Icons.history_rounded), label: 'Historial'),
-        NavigationDestination(icon: Icon(Icons.add_circle_rounded), label: 'Evaluar'),
+        NavigationDestination(
+            icon: Icon(Icons.home_rounded), label: 'Inicio'),
+        NavigationDestination(
+            icon: Icon(Icons.history_rounded), label: 'Historial'),
+        NavigationDestination(
+            icon: Icon(Icons.add_circle_rounded), label: 'Evaluar'),
       ],
     );
   }
@@ -274,8 +305,12 @@ class _StatBox extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(height: 6),
-            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: color)),
-            Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.w700, color: color)),
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 10, color: AppColors.textSecondary)),
           ],
         ),
       ),
@@ -295,10 +330,14 @@ class _EmptyState extends StatelessWidget {
           children: [
             Icon(Icons.shield_outlined, size: 48, color: AppColors.divider),
             SizedBox(height: 12),
-            Text('Sin evaluaciones aún', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+            Text('Sin evaluaciones aún',
+                style: TextStyle(
+                    color: AppColors.textSecondary, fontSize: 14)),
             SizedBox(height: 4),
             Text('Crea la primera evaluación con el botón de arriba.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12), textAlign: TextAlign.center),
+              style: TextStyle(
+                  color: AppColors.textSecondary, fontSize: 12),
+              textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -319,10 +358,13 @@ class _ErrorState extends StatelessWidget {
       child: Center(
         child: Column(
           children: [
-            const Icon(Icons.wifi_off_rounded, size: 40, color: AppColors.textSecondary),
+            const Icon(Icons.wifi_off_rounded,
+                size: 40, color: AppColors.textSecondary),
             const SizedBox(height: 12),
-            Text(message, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              textAlign: TextAlign.center),
+            Text(message,
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 13),
+                textAlign: TextAlign.center),
             const SizedBox(height: 12),
             TextButton.icon(
               onPressed: onRetry,

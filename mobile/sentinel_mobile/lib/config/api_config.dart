@@ -23,8 +23,13 @@ class ApiConfig {
   static String get clients     => '$baseUrl/clients';
   static String get assessments => '$baseUrl/assessments';
 
-  static String clientById(int id)     => '$clients/$id';
-  static String assessmentById(int id) => '$assessments/$id';
+  static String get login          => '$baseUrl/auth/login';
+  static String get forgotPassword => '$baseUrl/auth/forgot-password';
+  static String get contact        => '$baseUrl/auth/contact';
+
+  static String clientById(int id)          => '$clients/$id';
+  static String clientAssessments(int id)   => '$clients/$id/assessments';
+  static String assessmentById(int id)      => '$assessments/$id';
 
   static const Duration requestTimeout = Duration(seconds: 15);
 }

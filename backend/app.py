@@ -83,10 +83,12 @@ def internal_error(e):
 from routes.packs import packs_bp
 from routes.assessments import assessments_bp
 from routes.clients import clients_bp
+from routes.auth import auth_bp
 
 app.register_blueprint(packs_bp,       url_prefix=Config.API_PREFIX)
 app.register_blueprint(assessments_bp, url_prefix=Config.API_PREFIX)
 app.register_blueprint(clients_bp,     url_prefix=Config.API_PREFIX)
+app.register_blueprint(auth_bp,        url_prefix=Config.API_PREFIX)
 
 # ── Health Check ──────────────────────────────────────────────────────────────
 @app.route(f"{Config.API_PREFIX}/health", methods=["GET"])

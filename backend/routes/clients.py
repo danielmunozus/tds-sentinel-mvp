@@ -1,12 +1,12 @@
 """
 routes/clients.py — TDS Sentinel API
-Blueprint CRUD para gestión de clientes.
+CRUD de clientes con schema v3.
 
-GET    /clients          → listar todos (orden alfabético)
-POST   /clients          → crear cliente
-GET    /clients/<id>     → detalle
-PUT    /clients/<id>     → actualizar campos
-DELETE /clients/<id>     → eliminar (409 si tiene assessments asociados)
+GET    /clients              → listar
+POST   /clients              → crear (password_hash, email único, validación formato email)
+GET    /clients/<id>         → detalle
+PUT    /clients/<id>         → actualizar (no expone password_hash)
+DELETE /clients/<id>         → eliminar (409 si tiene assessments)
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, request
 
-from database import get_db_connection
+from database import get_db_connection, hash_password, validate_email, VALID_STATUSES
 
 logger = logging.getLogger(__name__)
 clients_bp = Blueprint("clients", __name__)
@@ -45,8 +45,8 @@ def _sanitize(value, field: str, required: bool = True) -> tuple[str, str | None
     return cleaned, None
 
 
-def _row_to_dict(row) -> dict:
-    return dict(row) if row else {}
+def _public(row: dict) -> dict:
+    return {k: v for k, v in row.items() if k != "password_hash"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -58,11 +58,11 @@ def list_clients():
     conn = get_db_connection()
     try:
         rows = conn.execute(
-            "SELECT * FROM clients ORDER BY name ASC"
+            "SELECT * FROM clients ORDER BY company_name ASC"
         ).fetchall()
     finally:
         conn.close()
-    return _success([_row_to_dict(r) for r in rows])
+    return _success([_public(dict(r)) for r in rows])
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -72,49 +72,71 @@ def list_clients():
 @clients_bp.route("/clients", methods=["POST"])
 def create_client():
     """
-    Body esperado:
+    Body:
     {
-        "name":         "Acme Corp",           (requerido)
-        "contact_name": "Jane Doe",            (opcional)
-        "email":        "jane@acme.com",       (opcional)
-        "industry":     "Manufactura"          (opcional)
+        "company_name": "Acme Corp",
+        "contact_name": "Jane Doe",
+        "email":        "jane@acme.com",
+        "phone":        "+52 55 1234 5678",
+        "password":     "SecurePass123",
+        "bs_area":      "Tecnología",
+        "client_status": "enabled"          (opcional, default: enabled)
     }
     """
     data = request.get_json(silent=True)
     if not data:
-        return _error("El cuerpo de la solicitud debe ser JSON válido.", 400)
+        return _error("El cuerpo debe ser JSON válido.", 400)
 
-    name, err = _sanitize(data.get("name", ""), "name")
-    if err:
-        return _error(err, 400)
+    company_name, err = _sanitize(data.get("company_name", ""), "company_name")
+    if err: return _error(err, 400)
 
-    contact_name, err = _sanitize(data.get("contact_name", ""), "contact_name", required=False)
-    if err:
-        return _error(err, 400)
+    contact_name, err = _sanitize(data.get("contact_name", ""), "contact_name")
+    if err: return _error(err, 400)
 
-    email, err = _sanitize(data.get("email", ""), "email", required=False)
-    if err:
-        return _error(err, 400)
+    email, err = _sanitize(data.get("email", ""), "email")
+    if err: return _error(err, 400)
+    if not validate_email(email):
+        return _error("El email no tiene un formato válido.", 400)
 
-    industry, err = _sanitize(data.get("industry", ""), "industry", required=False)
-    if err:
-        return _error(err, 400)
+    phone, err = _sanitize(data.get("phone", ""), "phone")
+    if err: return _error(err, 400)
+
+    password = data.get("password", "")
+    if not isinstance(password, str) or len(password.strip()) < 8:
+        return _error("La contraseña debe tener al menos 8 caracteres.", 400)
+
+    bs_area, err = _sanitize(data.get("bs_area", ""), "bs_area")
+    if err: return _error(err, 400)
+
+    client_status = data.get("client_status", "enabled")
+    if client_status not in VALID_STATUSES:
+        return _error(f"Estado inválido. Valores aceptados: {sorted(VALID_STATUSES)}", 400)
 
     now = datetime.now(timezone.utc).isoformat()
     conn = get_db_connection()
     try:
+        # Verificar email único
+        existing = conn.execute(
+            "SELECT id FROM clients WHERE LOWER(email) = LOWER(?)", (email,)
+        ).fetchone()
+        if existing:
+            return _error("Ya existe un cliente con ese email.", 409)
+
         cur = conn.execute(
-            """INSERT INTO clients (name, contact_name, email, industry, created_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (name, contact_name or None, email or None, industry or None, now),
+            """INSERT INTO clients
+               (company_name, contact_name, email, phone, password_hash,
+                bs_area, client_status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (company_name, contact_name, email, phone,
+             hash_password(password), bs_area, client_status, now),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM clients WHERE id = ?", (cur.lastrowid,)).fetchone()
     finally:
         conn.close()
 
-    logger.info("Cliente creado — id=%d name=%s", row["id"], name)
-    return _success(_row_to_dict(row), 201)
+    logger.info("Cliente creado — id=%d email=%s", row["id"], email)
+    return _success(_public(dict(row)), 201)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -130,10 +152,9 @@ def get_client(client_id: int):
         ).fetchone()
     finally:
         conn.close()
-
     if not row:
         return _error(f"Cliente {client_id} no encontrado.", 404)
-    return _success(_row_to_dict(row))
+    return _success(_public(dict(row)))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -142,9 +163,10 @@ def get_client(client_id: int):
 
 @clients_bp.route("/clients/<int:client_id>", methods=["PUT"])
 def update_client(client_id: int):
+    """Actualiza campos editables. Para cambiar contraseña incluir 'password' en el body."""
     data = request.get_json(silent=True)
     if not data:
-        return _error("El cuerpo de la solicitud debe ser JSON válido.", 400)
+        return _error("El cuerpo debe ser JSON válido.", 400)
 
     conn = get_db_connection()
     try:
@@ -153,42 +175,60 @@ def update_client(client_id: int):
         ).fetchone()
     finally:
         conn.close()
-
     if not existing:
         return _error(f"Cliente {client_id} no encontrado.", 404)
 
-    ex = _row_to_dict(existing)
+    ex = dict(existing)
 
-    name, err = _sanitize(data.get("name", ex["name"]), "name")
-    if err:
-        return _error(err, 400)
+    company_name, err = _sanitize(data.get("company_name", ex["company_name"]), "company_name")
+    if err: return _error(err, 400)
 
-    contact_name, err = _sanitize(
-        data.get("contact_name", ex.get("contact_name") or ""), "contact_name", required=False
-    )
-    if err:
-        return _error(err, 400)
+    contact_name, err = _sanitize(data.get("contact_name", ex["contact_name"]), "contact_name")
+    if err: return _error(err, 400)
 
-    email, err = _sanitize(
-        data.get("email", ex.get("email") or ""), "email", required=False
-    )
-    if err:
-        return _error(err, 400)
+    email = data.get("email", ex["email"])
+    email, err = _sanitize(email, "email")
+    if err: return _error(err, 400)
+    if not validate_email(email):
+        return _error("El email no tiene un formato válido.", 400)
 
-    industry, err = _sanitize(
-        data.get("industry", ex.get("industry") or ""), "industry", required=False
-    )
-    if err:
-        return _error(err, 400)
+    phone, err = _sanitize(data.get("phone", ex["phone"]), "phone")
+    if err: return _error(err, 400)
+
+    bs_area, err = _sanitize(data.get("bs_area", ex["bs_area"]), "bs_area")
+    if err: return _error(err, 400)
+
+    client_status = data.get("client_status", ex["client_status"])
+    if client_status not in VALID_STATUSES:
+        return _error(f"Estado inválido. Valores aceptados: {sorted(VALID_STATUSES)}", 400)
+
+    # Contraseña opcional en update
+    new_password = data.get("password")
+    if new_password is not None:
+        if not isinstance(new_password, str) or len(new_password.strip()) < 8:
+            return _error("La contraseña debe tener al menos 8 caracteres.", 400)
+        new_hash = hash_password(new_password)
+    else:
+        new_hash = ex["password_hash"]
 
     now = datetime.now(timezone.utc).isoformat()
     conn = get_db_connection()
     try:
+        # Verificar unicidad de email si cambió
+        if email.lower() != ex["email"].lower():
+            dup = conn.execute(
+                "SELECT id FROM clients WHERE LOWER(email) = LOWER(?) AND id != ?",
+                (email, client_id)
+            ).fetchone()
+            if dup:
+                return _error("Ya existe un cliente con ese email.", 409)
+
         conn.execute(
-            """UPDATE clients
-               SET name=?, contact_name=?, email=?, industry=?, updated_at=?
+            """UPDATE clients SET company_name=?, contact_name=?, email=?, phone=?,
+               password_hash=?, bs_area=?, client_status=?, updated_at=?
                WHERE id=?""",
-            (name, contact_name or None, email or None, industry or None, now, client_id),
+            (company_name, contact_name, email, phone,
+             new_hash, bs_area, client_status, now, client_id),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM clients WHERE id = ?", (client_id,)).fetchone()
@@ -196,7 +236,7 @@ def update_client(client_id: int):
         conn.close()
 
     logger.info("Cliente actualizado — id=%d", client_id)
-    return _success(_row_to_dict(row))
+    return _success(_public(dict(row)))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -218,8 +258,7 @@ def delete_client(client_id: int):
         ).fetchone()[0]
         if count > 0:
             return _error(
-                f"No se puede eliminar: el cliente tiene {count} evaluación(es) asociada(s).",
-                409,
+                f"No se puede eliminar: el cliente tiene {count} evaluación(es) asociada(s).", 409
             )
 
         conn.execute("DELETE FROM clients WHERE id = ?", (client_id,))

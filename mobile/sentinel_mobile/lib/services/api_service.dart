@@ -1,6 +1,5 @@
 // lib/services/api_service.dart — TDS Sentinel
 // Capa de servicio HTTP. Toda comunicación con Flask pasa por aquí.
-// Los screens nunca construyen URLs ni tocan http directamente.
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -9,7 +8,6 @@ import '../models/assessment_pack.dart';
 import '../models/client.dart';
 import '../models/risk_assessment.dart';
 
-// Excepción tipada para errores de API
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
@@ -23,45 +21,95 @@ class ApiService {
   ApiService._();
   static final ApiService instance = ApiService._();
 
-  final http.Client _client = http.Client();
-
-  // ── Helpers internos ───────────────────────────────────────────────────────
+  final http.Client _http = http.Client();
 
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
     'Accept':       'application/json',
   };
 
-  /// Procesa la respuesta HTTP. Lanza ApiException si el status >= 400.
-  /// Nunca expone el stack trace interno al usuario.
-  dynamic _processResponse(http.Response response) {
+  dynamic _process(http.Response response) {
     final body = utf8.decode(response.bodyBytes);
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (body.isEmpty) return null;
-      return json.decode(body);
+      return body.isEmpty ? null : json.decode(body);
     }
-    // Intentar extraer mensaje de error del JSON
-    String errorMsg = 'Error del servidor (${response.statusCode})';
+    String msg = 'Error del servidor (${response.statusCode})';
     try {
       final decoded = json.decode(body);
-      if (decoded is Map && decoded.containsKey('error')) {
-        errorMsg = decoded['error'] as String;
-      }
+      if (decoded is Map && decoded.containsKey('error')) msg = decoded['error'] as String;
     } catch (_) {}
-    throw ApiException(errorMsg, statusCode: response.statusCode);
+    throw ApiException(msg, statusCode: response.statusCode);
   }
 
   // ── Health ─────────────────────────────────────────────────────────────────
 
   Future<bool> checkHealth() async {
     try {
-      final response = await _client
-          .get(Uri.parse(ApiConfig.health), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.health), headers: _headers)
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as Map<String, dynamic>;
+      final data = _process(r) as Map<String, dynamic>;
       return data['status'] == 'ok';
     } catch (_) {
       return false;
+    }
+  }
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+
+  Future<Client> login(String email, String password) async {
+    try {
+      final r = await _http.post(Uri.parse(ApiConfig.login), headers: _headers,
+          body: json.encode({'email': email.trim(), 'password': password}))
+          .timeout(ApiConfig.requestTimeout);
+      final data = _process(r) as Map<String, dynamic>;
+      return Client.fromJson(data);
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('No se pudo conectar con el servidor.');
+    }
+  }
+
+  Future<String> forgotPassword(String email) async {
+    try {
+      final r = await _http.post(Uri.parse(ApiConfig.forgotPassword), headers: _headers,
+          body: json.encode({'email': email.trim()}))
+          .timeout(ApiConfig.requestTimeout);
+      final data = _process(r) as Map<String, dynamic>;
+      return data['message'] as String? ?? 'Solicitud enviada.';
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('No se pudo enviar la solicitud.');
+    }
+  }
+
+  Future<String> sendContactRequest({
+    required String companyName,
+    required String contactName,
+    required String email,
+    String? phone,
+    String? packInterest,
+    String? message,
+  }) async {
+    try {
+      final r = await _http.post(Uri.parse(ApiConfig.contact), headers: _headers,
+          body: json.encode({
+            'company_name':  companyName.trim(),
+            'contact_name':  contactName.trim(),
+            'email':         email.trim(),
+            if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+            if (packInterest != null && packInterest.trim().isNotEmpty)
+              'pack_interest': packInterest.trim(),
+            if (message != null && message.trim().isNotEmpty) 'message': message.trim(),
+          }))
+          .timeout(ApiConfig.requestTimeout);
+      final data = _process(r) as Map<String, dynamic>;
+      return data['message'] as String? ?? 'Solicitud enviada.';
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw const ApiException('No se pudo enviar la solicitud de contacto.');
     }
   }
 
@@ -69,13 +117,10 @@ class ApiService {
 
   Future<List<Client>> fetchClients() async {
     try {
-      final response = await _client
-          .get(Uri.parse(ApiConfig.clients), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.clients), headers: _headers)
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as List<dynamic>;
-      return data
-          .map((c) => Client.fromJson(c as Map<String, dynamic>))
-          .toList();
+      final data = _process(r) as List<dynamic>;
+      return data.map((c) => Client.fromJson(c as Map<String, dynamic>)).toList();
     } on ApiException {
       rethrow;
     } catch (_) {
@@ -84,24 +129,29 @@ class ApiService {
   }
 
   Future<Client> createClient({
-    required String name,
+    required String companyName,
+    required String email,
+    required String password,
     String? contactName,
-    String? email,
-    String? industry,
+    String? phone,
+    String? bsArea,
   }) async {
-    if (name.trim().isEmpty) throw const ApiException('El nombre del cliente es requerido.');
+    if (companyName.trim().isEmpty) throw const ApiException('El nombre de empresa es requerido.');
+    if (email.trim().isEmpty)       throw const ApiException('El email es requerido.');
+    if (password.isEmpty)           throw const ApiException('La contraseña es requerida.');
     try {
-      final body = json.encode({
-        'name':         name.trim(),
-        if (contactName != null && contactName.trim().isNotEmpty)
-          'contact_name': contactName.trim(),
-        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
-        if (industry != null && industry.trim().isNotEmpty) 'industry': industry.trim(),
-      });
-      final response = await _client
-          .post(Uri.parse(ApiConfig.clients), headers: _headers, body: body)
+      final r = await _http.post(Uri.parse(ApiConfig.clients), headers: _headers,
+          body: json.encode({
+            'company_name': companyName.trim(),
+            'email':        email.trim(),
+            'password':     password,
+            if (contactName != null && contactName.trim().isNotEmpty)
+              'contact_name': contactName.trim(),
+            if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+            if (bsArea != null && bsArea.trim().isNotEmpty) 'bs_area': bsArea.trim(),
+          }))
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as Map<String, dynamic>;
+      final data = _process(r) as Map<String, dynamic>;
       return Client.fromJson(data);
     } on ApiException {
       rethrow;
@@ -110,18 +160,29 @@ class ApiService {
     }
   }
 
-  Future<Client> updateClient(int id, {String? name, String? contactName, String? email, String? industry}) async {
+  Future<Client> updateClient(int id, {
+    String? companyName,
+    String? contactName,
+    String? email,
+    String? phone,
+    String? bsArea,
+    String? clientStatus,
+  }) async {
     try {
       final payload = <String, String>{};
-      if (name != null && name.trim().isNotEmpty) payload['name'] = name.trim();
+      if (companyName != null && companyName.trim().isNotEmpty) {
+        payload['company_name'] = companyName.trim();
+      }
       if (contactName != null) payload['contact_name'] = contactName.trim();
-      if (email != null) payload['email'] = email.trim();
-      if (industry != null) payload['industry'] = industry.trim();
+      if (email != null && email.trim().isNotEmpty) payload['email'] = email.trim();
+      if (phone != null) payload['phone'] = phone.trim();
+      if (bsArea != null) payload['bs_area'] = bsArea.trim();
+      if (clientStatus != null) payload['client_status'] = clientStatus;
       if (payload.isEmpty) throw const ApiException('No hay campos para actualizar.');
-      final response = await _client
-          .put(Uri.parse(ApiConfig.clientById(id)), headers: _headers, body: json.encode(payload))
+      final r = await _http.put(Uri.parse(ApiConfig.clientById(id)), headers: _headers,
+          body: json.encode(payload))
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as Map<String, dynamic>;
+      final data = _process(r) as Map<String, dynamic>;
       return Client.fromJson(data);
     } on ApiException {
       rethrow;
@@ -132,10 +193,9 @@ class ApiService {
 
   Future<void> deleteClient(int id) async {
     try {
-      final response = await _client
-          .delete(Uri.parse(ApiConfig.clientById(id)), headers: _headers)
+      final r = await _http.delete(Uri.parse(ApiConfig.clientById(id)), headers: _headers)
           .timeout(ApiConfig.requestTimeout);
-      _processResponse(response);
+      _process(r);
     } on ApiException {
       rethrow;
     } catch (_) {
@@ -147,16 +207,13 @@ class ApiService {
 
   Future<List<AssessmentPack>> fetchPacks() async {
     try {
-      final response = await _client
-          .get(Uri.parse(ApiConfig.packs), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.packs), headers: _headers)
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as List<dynamic>;
-      return data
-          .map((p) => AssessmentPack.fromJson(p as Map<String, dynamic>))
-          .toList();
+      final data = _process(r) as List<dynamic>;
+      return data.map((p) => AssessmentPack.fromJson(p as Map<String, dynamic>)).toList();
     } on ApiException {
       rethrow;
-    } catch (e) {
+    } catch (_) {
       throw const ApiException('No se pudo conectar con el servidor. Verifica que la API esté corriendo.');
     }
   }
@@ -165,99 +222,74 @@ class ApiService {
 
   Future<List<RiskAssessment>> fetchAssessments() async {
     try {
-      final response = await _client
-          .get(Uri.parse(ApiConfig.assessments), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.assessments), headers: _headers)
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as List<dynamic>;
-      return data
-          .map((a) => RiskAssessment.fromJson(a as Map<String, dynamic>))
-          .toList();
+      final data = _process(r) as List<dynamic>;
+      return data.map((a) => RiskAssessment.fromJson(a as Map<String, dynamic>)).toList();
     } on ApiException {
       rethrow;
-    } catch (e) {
+    } catch (_) {
+      throw const ApiException('No se pudo cargar el historial de evaluaciones.');
+    }
+  }
+
+  Future<List<RiskAssessment>> fetchClientAssessments(int clientId) async {
+    try {
+      final r = await _http.get(Uri.parse(ApiConfig.clientAssessments(clientId)), headers: _headers)
+          .timeout(ApiConfig.requestTimeout);
+      final data = _process(r) as List<dynamic>;
+      return data.map((a) => RiskAssessment.fromJson(a as Map<String, dynamic>)).toList();
+    } on ApiException {
+      rethrow;
+    } catch (_) {
       throw const ApiException('No se pudo cargar el historial de evaluaciones.');
     }
   }
 
   Future<RiskAssessment> fetchAssessmentById(int id) async {
     try {
-      final response = await _client
-          .get(Uri.parse(ApiConfig.assessmentById(id)), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.assessmentById(id)), headers: _headers)
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as Map<String, dynamic>;
+      final data = _process(r) as Map<String, dynamic>;
       return RiskAssessment.fromJson(data);
     } on ApiException {
       rethrow;
-    } catch (e) {
+    } catch (_) {
       throw const ApiException('No se pudo cargar la evaluación.');
     }
   }
 
   Future<RiskAssessment> createAssessment({
     required int clientId,
-    required String responsibleName,
     required String packId,
     required Map<String, String> answers,
   }) async {
-    if (responsibleName.trim().isEmpty) throw const ApiException('El nombre del responsable es requerido.');
     if (answers.isEmpty) throw const ApiException('Debe responder al menos un control.');
-
     try {
-      final body = json.encode({
-        'client_id':        clientId,
-        'responsible_name': responsibleName.trim(),
-        'pack_id':          packId,
-        'answers':          answers,
-      });
-      final response = await _client
-          .post(Uri.parse(ApiConfig.assessments), headers: _headers, body: body)
+      final r = await _http.post(Uri.parse(ApiConfig.assessments), headers: _headers,
+          body: json.encode({
+            'client_id': clientId,
+            'pack_id':   packId,
+            'answers':   answers,
+          }))
           .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as Map<String, dynamic>;
+      final data = _process(r) as Map<String, dynamic>;
       return RiskAssessment.fromJson(data);
     } on ApiException {
       rethrow;
-    } catch (e) {
+    } catch (_) {
       throw const ApiException('No se pudo crear la evaluación. Verifica tu conexión.');
-    }
-  }
-
-  Future<RiskAssessment> updateAssessment(
-    int id, {
-    String? companyName,
-    String? responsibleName,
-  }) async {
-    try {
-      final payload = <String, String>{};
-      if (companyName != null && companyName.trim().isNotEmpty) {
-        payload['company_name'] = companyName.trim();
-      }
-      if (responsibleName != null && responsibleName.trim().isNotEmpty) {
-        payload['responsible_name'] = responsibleName.trim();
-      }
-      if (payload.isEmpty) throw const ApiException('No hay campos para actualizar.');
-
-      final response = await _client
-          .put(Uri.parse(ApiConfig.assessmentById(id)),
-               headers: _headers, body: json.encode(payload))
-          .timeout(ApiConfig.requestTimeout);
-      final data = _processResponse(response) as Map<String, dynamic>;
-      return RiskAssessment.fromJson(data);
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw const ApiException('No se pudo actualizar la evaluación.');
     }
   }
 
   Future<void> deleteAssessment(int id) async {
     try {
-      final response = await _client
-          .delete(Uri.parse(ApiConfig.assessmentById(id)), headers: _headers)
+      final r = await _http.delete(Uri.parse(ApiConfig.assessmentById(id)), headers: _headers)
           .timeout(ApiConfig.requestTimeout);
-      _processResponse(response);
+      _process(r);
     } on ApiException {
       rethrow;
-    } catch (e) {
+    } catch (_) {
       throw const ApiException('No se pudo eliminar la evaluación.');
     }
   }

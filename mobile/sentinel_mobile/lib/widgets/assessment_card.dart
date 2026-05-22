@@ -46,11 +46,6 @@ class AssessmentCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                assessment.responsibleName,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              ),
               const SizedBox(height: 10),
               Row(
                 children: [

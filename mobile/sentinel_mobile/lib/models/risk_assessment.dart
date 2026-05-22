@@ -1,6 +1,4 @@
-// lib/models/risk_assessment.dart — TDS Sentinel
-// Modelo de evaluación de riesgo persistida.
-
+// lib/models/risk_assessment.dart — TDS Sentinel v3
 class Recommendation {
   final String controlId;
   final String question;
@@ -32,9 +30,8 @@ class Recommendation {
 
 class RiskAssessment {
   final int id;
-  final int? clientId;
-  final String companyName;
-  final String responsibleName;
+  final int clientId;
+  final String companyName;   // viene del JOIN con clients
   final String packId;
   final Map<String, String> answers;
   final double score;
@@ -46,9 +43,8 @@ class RiskAssessment {
 
   const RiskAssessment({
     required this.id,
-    this.clientId,
+    required this.clientId,
     required this.companyName,
-    required this.responsibleName,
     required this.packId,
     required this.answers,
     required this.score,
@@ -67,27 +63,23 @@ class RiskAssessment {
 
     final rawRecs = json['recommendations_json'];
     final List<Recommendation> recs = rawRecs is List
-        ? rawRecs
-            .map((r) => Recommendation.fromJson(r as Map<String, dynamic>))
-            .toList()
+        ? rawRecs.map((r) => Recommendation.fromJson(r as Map<String, dynamic>)).toList()
         : [];
 
     return RiskAssessment(
-      id:               (json['id'] as num).toInt(),
-      clientId:         json['client_id'] != null ? (json['client_id'] as num).toInt() : null,
-      companyName:      json['company_name'] as String,
-      responsibleName:  json['responsible_name'] as String,
-      packId:           json['pack_id'] as String,
-      answers:          answers,
-      score:            (json['score'] as num).toDouble(),
-      riskLevel:        json['risk_level'] as String,
-      recommendations:  recs,
-      assessmentHash:   json['assessment_hash'] as String,
-      createdAt:        json['created_at'] as String,
-      updatedAt:        json['updated_at'] as String?,
+      id:             (json['id'] as num).toInt(),
+      clientId:       (json['client_id'] as num).toInt(),
+      companyName:    json['company_name'] as String? ?? '',
+      packId:         json['pack_id'] as String,
+      answers:        answers,
+      score:          (json['score'] as num).toDouble(),
+      riskLevel:      json['risk_level'] as String,
+      recommendations: recs,
+      assessmentHash: json['assessment_hash'] as String,
+      createdAt:      json['created_at'] as String,
+      updatedAt:      json['updated_at'] as String?,
     );
   }
 
-  // Score visual entero para mostrar en UI (0-100)
   int get scoreInt => score.round();
 }

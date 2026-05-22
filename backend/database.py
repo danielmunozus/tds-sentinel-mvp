@@ -1,9 +1,15 @@
 """
 database.py — TDS Sentinel API
-Gestión de conexión y ciclo de vida de la base de datos SQLite.
-Schema v2.0.0: tabla clients + FK client_id en risk_assessments.
+Schema v3.0.0
+  clients          — autenticación + datos empresariales completos
+  risk_assessments — sin company_name/responsible_name, FK a clients
+  support_tickets  — tickets de soporte (ej. reset de contraseña)
+  contact_requests — solicitudes de cotización de nuevos clientes
 """
 
+import hashlib
+import re
+import secrets
 import sqlite3
 import logging
 from datetime import datetime, timezone
@@ -11,6 +17,13 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
+EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+VALID_STATUSES = {"enabled", "blocked", "disabled"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Conexión
+# ──────────────────────────────────────────────────────────────────────────────
 
 def get_db_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(Config.DB_PATH)
@@ -36,7 +49,109 @@ def init_db() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Helpers
+# Utilidades de contraseña y email
+# ──────────────────────────────────────────────────────────────────────────────
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    return f"{salt}:{digest}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        salt, stored_hash = stored.split(":", 1)
+        computed = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+        return secrets.compare_digest(computed, stored_hash)
+    except (ValueError, AttributeError):
+        return False
+
+
+def validate_email(email: str) -> bool:
+    return bool(EMAIL_RE.match(email.strip()))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Creación de tablas (versión actual 3.0.0)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _create_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_version (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            version    TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS clients (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name  TEXT    NOT NULL,
+            contact_name  TEXT    NOT NULL,
+            email         TEXT    NOT NULL UNIQUE,
+            phone         TEXT    NOT NULL,
+            password_hash TEXT    NOT NULL,
+            bs_area       TEXT    NOT NULL,
+            client_status TEXT    NOT NULL DEFAULT 'enabled',
+            created_at    TEXT    NOT NULL,
+            updated_at    TEXT,
+            CHECK (client_status IN ('enabled', 'blocked', 'disabled'))
+        )
+    """)
+
+    # client_id es NOT NULL para nuevos registros; nullable solo durante migración.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS risk_assessments (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id            INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+            pack_id              TEXT    NOT NULL,
+            answers_json         TEXT    NOT NULL,
+            score                REAL    NOT NULL,
+            risk_level           TEXT    NOT NULL,
+            recommendations_json TEXT    NOT NULL,
+            assessment_hash      TEXT    NOT NULL,
+            created_at           TEXT    NOT NULL,
+            updated_at           TEXT
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS support_tickets (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            email      TEXT    NOT NULL,
+            client_id  INTEGER REFERENCES clients(id),
+            type       TEXT    NOT NULL DEFAULT 'password_reset',
+            status     TEXT    NOT NULL DEFAULT 'open',
+            created_at TEXT    NOT NULL,
+            updated_at TEXT
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contact_requests (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name  TEXT    NOT NULL,
+            contact_name  TEXT    NOT NULL,
+            email         TEXT    NOT NULL,
+            phone         TEXT    NOT NULL,
+            pack_interest TEXT,
+            message       TEXT,
+            status        TEXT    NOT NULL DEFAULT 'new',
+            created_at    TEXT    NOT NULL
+        )
+    """)
+
+    existing = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
+    if existing == 0:
+        conn.execute(
+            "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+            ("3.0.0", datetime.now(timezone.utc).isoformat()),
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Migraciones
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _current_version(conn: sqlite3.Connection) -> str:
@@ -49,121 +164,149 @@ def _current_version(conn: sqlite3.Connection) -> str:
         return "0.0.0"
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Creación de tablas (versión actual: 2.0.0)
-# ──────────────────────────────────────────────────────────────────────────────
-
-def _create_tables(conn: sqlite3.Connection) -> None:
-    """Crea todas las tablas si no existen. Seguro de llamar múltiples veces."""
-
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS schema_version (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            version    TEXT NOT NULL,
-            applied_at TEXT NOT NULL
-        )
-    """)
-
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS clients (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            name         TEXT    NOT NULL,
-            contact_name TEXT,
-            email        TEXT,
-            industry     TEXT,
-            created_at   TEXT    NOT NULL,
-            updated_at   TEXT
-        )
-    """)
-
-    # client_id es nullable en DDL para compatibilidad con ALTER TABLE en migraciones.
-    # La capa de aplicación (routes/assessments.py) exige que no sea NULL en nuevos registros.
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS risk_assessments (
-            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id            INTEGER REFERENCES clients(id) ON DELETE RESTRICT,
-            company_name         TEXT    NOT NULL,
-            responsible_name     TEXT    NOT NULL,
-            pack_id              TEXT    NOT NULL,
-            answers_json         TEXT    NOT NULL,
-            score                REAL    NOT NULL,
-            risk_level           TEXT    NOT NULL,
-            recommendations_json TEXT    NOT NULL,
-            assessment_hash      TEXT    NOT NULL,
-            created_at           TEXT    NOT NULL,
-            updated_at           TEXT
-        )
-    """)
-
-    existing = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
-    if existing == 0:
-        conn.execute(
-            "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-            ("2.0.0", datetime.now(timezone.utc).isoformat()),
-        )
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Migraciones
-# ──────────────────────────────────────────────────────────────────────────────
-
 def _run_migrations(conn: sqlite3.Connection) -> None:
     version = _current_version(conn)
-    if version == "1.0.0":
-        _migrate_1_to_2(conn)
-        logger.info("Migración 1.0.0 → 2.0.0 completada.")
+    if version in ("1.0.0", "2.0.0"):
+        _migrate_to_v3(conn)
+        logger.info("Migración %s → 3.0.0 completada.", version)
 
 
-def _migrate_1_to_2(conn: sqlite3.Connection) -> None:
+def _migrate_to_v3(conn: sqlite3.Connection) -> None:
     """
-    v1 → v2: introduce tabla clients y FK client_id en risk_assessments.
-    Preserva todos los registros existentes asignándolos a un cliente 'Legado'.
+    Migra cualquier versión anterior (1.x, 2.x) a v3.
+    - Recrea clients con nuevo schema completo.
+    - Recrea risk_assessments sin company_name/responsible_name.
+    - Crea support_tickets y contact_requests si no existen.
     """
     now = datetime.now(timezone.utc).isoformat()
 
+    # ── Migrar clients ────────────────────────────────────────────────────────
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()}
+
+    if "clients" in tables:
+        conn.execute("ALTER TABLE clients RENAME TO clients_legacy")
+
+        conn.execute("""
+            CREATE TABLE clients (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_name  TEXT    NOT NULL,
+                contact_name  TEXT    NOT NULL,
+                email         TEXT    NOT NULL UNIQUE,
+                phone         TEXT    NOT NULL,
+                password_hash TEXT    NOT NULL,
+                bs_area       TEXT    NOT NULL,
+                client_status TEXT    NOT NULL DEFAULT 'enabled',
+                created_at    TEXT    NOT NULL,
+                updated_at    TEXT,
+                CHECK (client_status IN ('enabled', 'blocked', 'disabled'))
+            )
+        """)
+
+        legacy_cols = {
+            r[1] for r in conn.execute("PRAGMA table_info(clients_legacy)").fetchall()
+        }
+
+        # Columna de nombre: puede llamarse 'name' (v1/v2) o 'company_name' (v2+)
+        name_col = "company_name" if "company_name" in legacy_cols else "name"
+
+        rows = conn.execute(f"SELECT * FROM clients_legacy").fetchall()
+        placeholder_hash = hash_password("ChangeMe123!")
+
+        for row in rows:
+            d = dict(row)
+            conn.execute(
+                """INSERT INTO clients
+                   (id, company_name, contact_name, email, phone,
+                    password_hash, bs_area, client_status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    d["id"],
+                    d.get(name_col) or d.get("name", "Cliente migrado"),
+                    d.get("contact_name") or "Sin definir",
+                    d.get("email") or f"migrado_{d['id']}@pending.local",
+                    d.get("phone") or "0000000000",
+                    placeholder_hash,
+                    d.get("bs_area") or d.get("industry") or "Sin definir",
+                    d.get("client_status", "enabled"),
+                    d.get("created_at", now),
+                    d.get("updated_at"),
+                ),
+            )
+            logger.info(
+                "Cliente migrado — id=%d, contraseña temporal: ChangeMe123!", d["id"]
+            )
+
+        conn.execute("DROP TABLE clients_legacy")
+
+    # ── Migrar risk_assessments ───────────────────────────────────────────────
+    if "risk_assessments" in tables:
+        conn.execute("ALTER TABLE risk_assessments RENAME TO risk_assessments_legacy")
+
+        conn.execute("""
+            CREATE TABLE risk_assessments (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id            INTEGER NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+                pack_id              TEXT    NOT NULL,
+                answers_json         TEXT    NOT NULL,
+                score                REAL    NOT NULL,
+                risk_level           TEXT    NOT NULL,
+                recommendations_json TEXT    NOT NULL,
+                assessment_hash      TEXT    NOT NULL,
+                created_at           TEXT    NOT NULL,
+                updated_at           TEXT
+            )
+        """)
+
+        rows = conn.execute("SELECT * FROM risk_assessments_legacy").fetchall()
+        for row in rows:
+            d = dict(row)
+            if d.get("client_id") is None:
+                continue  # Sin FK válida, se descarta (datos corruptos)
+            conn.execute(
+                """INSERT INTO risk_assessments
+                   (id, client_id, pack_id, answers_json, score, risk_level,
+                    recommendations_json, assessment_hash, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    d["id"], d["client_id"], d["pack_id"],
+                    d["answers_json"], d["score"], d["risk_level"],
+                    d["recommendations_json"], d["assessment_hash"],
+                    d["created_at"], d.get("updated_at"),
+                ),
+            )
+
+        conn.execute("DROP TABLE risk_assessments_legacy")
+
+    # ── Nuevas tablas ─────────────────────────────────────────────────────────
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS clients (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            name         TEXT    NOT NULL,
-            contact_name TEXT,
-            email        TEXT,
-            industry     TEXT,
-            created_at   TEXT    NOT NULL,
-            updated_at   TEXT
+        CREATE TABLE IF NOT EXISTS support_tickets (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            email      TEXT    NOT NULL,
+            client_id  INTEGER REFERENCES clients(id),
+            type       TEXT    NOT NULL DEFAULT 'password_reset',
+            status     TEXT    NOT NULL DEFAULT 'open',
+            created_at TEXT    NOT NULL,
+            updated_at TEXT
         )
     """)
 
-    # ADD COLUMN solo si no existe (SQLite no soporta IF NOT EXISTS en ADD COLUMN)
-    existing_cols = [
-        row[1] for row in conn.execute("PRAGMA table_info(risk_assessments)").fetchall()
-    ]
-    if "client_id" not in existing_cols:
-        conn.execute(
-            "ALTER TABLE risk_assessments ADD COLUMN "
-            "client_id INTEGER REFERENCES clients(id) ON DELETE RESTRICT"
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contact_requests (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name  TEXT    NOT NULL,
+            contact_name  TEXT    NOT NULL,
+            email         TEXT    NOT NULL,
+            phone         TEXT    NOT NULL,
+            pack_interest TEXT,
+            message       TEXT,
+            status        TEXT    NOT NULL DEFAULT 'new',
+            created_at    TEXT    NOT NULL
         )
-
-    # Asignar registros huérfanos a un cliente "Legado"
-    orphans = conn.execute(
-        "SELECT COUNT(*) FROM risk_assessments WHERE client_id IS NULL"
-    ).fetchone()[0]
-
-    if orphans > 0:
-        cur = conn.execute(
-            "INSERT INTO clients (name, contact_name, created_at) VALUES (?, ?, ?)",
-            ("Legado (migrado)", None, now),
-        )
-        legacy_id = cur.lastrowid
-        conn.execute(
-            "UPDATE risk_assessments SET client_id = ? WHERE client_id IS NULL",
-            (legacy_id,),
-        )
-        logger.info(
-            "Migración: %d assessment(s) asignados al cliente 'Legado' (id=%d)",
-            orphans, legacy_id,
-        )
+    """)
 
     conn.execute(
         "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-        ("2.0.0", now),
+        ("3.0.0", now),
     )

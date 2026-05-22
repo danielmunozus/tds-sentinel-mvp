@@ -148,12 +148,12 @@ git push origin main
 ## Hitos completados
 
 - [x] Hito 1 — Project Foundation + Backend Base
-- [ ] Hito 2 — Security Assessment Packs + Risk Engine
-- [ ] Hito 3 — SQLite Persistence + REST API CRUD
-- [ ] Hito 4 — Flutter Foundation
-- [ ] Hito 5 — Flutter Models + API Service
-- [ ] Hito 6 — Assessment Form UI
-- [ ] Hito 7 — Results Screen
-- [ ] Hito 8 — History + CRUD UX
-- [ ] Hito 9 — TDS Branding + Polish
-- [ ] Hito 10 — Testing + Docs + Packaging
+- [x] Hito 2 — Security Assessment Packs + Risk Engine
+- [x] Hito 3 — SQLite Persistence + REST API CRUD
+- [x] Hito 4 — Flutter Foundation
+- [x] Hito 5 — Flutter Models + API Service
+- [x] Hito 6 — Assessment Form UI
+- [x] Hito 7 — Results Screen
+- [x] Hito 8 — History + CRUD UX
+- [x] Hito 9 — TDS Branding + Polish
+- [x] Hito 10 — Testing + Docs + Packaging

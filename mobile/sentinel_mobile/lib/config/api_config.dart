@@ -5,10 +5,7 @@
 class ApiConfig {
   ApiConfig._(); // Clase no instanciable
 
-  // URL base local para desarrollo en macOS.
-  // Si usas emulador Android, cambia a: http://10.0.2.2:5000/api
-  // Si usas Codespaces, cambia a la URL pública del Codespace.
-  static const String baseUrl = 'http://127.0.0.1:5000/api';
+  static const String baseUrl = 'https://solid-cod-v6g47jv7qvxjhp996-5000.app.github.dev/api';
 
   // Endpoints
   static const String health      = '$baseUrl/health';

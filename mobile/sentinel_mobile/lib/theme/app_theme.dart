@@ -116,7 +116,7 @@ class AppTheme {
         labelStyle: GoogleFonts.montserrat(color: AppColors.textSecondary, fontSize: 14),
         hintStyle: GoogleFonts.montserrat(color: AppColors.textSecondary, fontSize: 14),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.cardBg,
         elevation: 0,
         shape: RoundedRectangleBorder(

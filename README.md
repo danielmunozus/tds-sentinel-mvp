@@ -139,8 +139,8 @@ Usuario completa checklist
 
 ## Equipo
 
-**Empresa:** TDS Innovate — *Built secure. Built to scale.*
-**Desarrollador:** Daniel Munoz · hello@danielmunoz.us
+**Empresa:** TDS Innovate — *Built secure. Built to scale.*  
+**Desarrollador:** Daniel Munoz · hello@danielmunoz.us  
 **Asignatura:** Taller de Desarrollo Web y Móvil · Sumativa 4  
 **Stack:** Flask + SQLite + Flutter  
 

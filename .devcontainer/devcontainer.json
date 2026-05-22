@@ -1,0 +1,37 @@
+{
+  "name": "TDS Sentinel MVP",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+
+  "features": {
+    "ghcr.io/devcontainers/features/flutter:1": {
+      "version": "stable"
+    }
+  },
+
+  "forwardPorts": [5000],
+
+  "portsAttributes": {
+    "5000": {
+      "label": "Sentinel API",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "postCreateCommand": "cd backend && pip install -r requirements.txt && cp .env.example .env && python3 -c \"import secrets; key=secrets.token_hex(32); content=open('.env').read().replace('REEMPLAZA_CON_UN_VALOR_SECRETO_SEGURO', key); open('.env','w').write(content)\" && echo '[Sentinel] Entorno listo. Corre: cd backend && python3 app.py'",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.flake8",
+        "Dart-Code.flutter",
+        "Dart-Code.dart-code"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 4
+      }
+    }
+  }
+}

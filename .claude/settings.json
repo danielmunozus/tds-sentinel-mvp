@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR>1 { *)",
+      "Bash(/vscode/bin/linux-x64/f6cfa2ea2403534de03f069bdf160d06451ed282/bin/remote-cli/code --help)",
+      "Bash(# El problema: Flask corre con debug+reloader \\(2 procesos\\), *)",
+      "Read(//vscode/bin/linux-x64/f6cfa2ea2403534de03f069bdf160d06451ed282/bin/helpers/**)",
+      "Bash(pkill -f \"app.py\")",
+      "Bash(FLASK_DEBUG=false nohup /workspaces/tds-sentinel-mvp/.venv/bin/python -c ' *)"
+    ]
+  }
+}

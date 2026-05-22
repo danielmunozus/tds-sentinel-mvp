@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'contact_form_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -49,23 +50,23 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _forgotPassword() async {
+  void _forgotPassword() {
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
       setState(() => _error = 'Ingresa tu email primero para recuperar la contraseña.');
       return;
     }
-    setState(() { _loading = true; _error = null; });
-    try {
-      final msg = await ApiService.instance.forgotPassword(email);
-      setState(() => _loading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppColors.navyDark));
-      }
-    } on ApiException catch (e) {
-      setState(() { _error = e.message; _loading = false; });
+    if (!email.contains('@')) {
+      setState(() => _error = 'Ingresa un email válido para recuperar la contraseña.');
+      return;
     }
+    setState(() => _error = null);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ForgotPasswordScreen(email: email),
+      ),
+    );
   }
 
   @override

@@ -17,7 +17,7 @@
     }
   },
   "postCreateCommand": "/usr/bin/python3 -m pip install -r /workspaces/tds-sentinel-mvp/backend/requirements.txt --break-system-packages -q && cd /workspaces/tds-sentinel-mvp/backend && cp .env.example .env && /usr/bin/python3 -c \"import secrets; key=secrets.token_hex(32); content=open('.env').read().replace('REEMPLAZA_CON_UN_VALOR_SECRETO_SEGURO', key); open('.env','w').write(content)\" && cd /workspaces/tds-sentinel-mvp/mobile/sentinel_mobile && flutter pub get && echo 'Setup completado'",
-  "postStartCommand": "bash /workspaces/tds-sentinel-mvp/backend/start.sh",
+  "postStartCommand": "openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/sentinel_key.pem -out /tmp/sentinel_cert.pem -days 365 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' 2>/dev/null && SSL_CERT=/tmp/sentinel_cert.pem SSL_KEY=/tmp/sentinel_key.pem nohup /workspaces/tds-sentinel-mvp/.venv/bin/python /workspaces/tds-sentinel-mvp/backend/start_https.py > /tmp/sentinel_https.log 2>&1 & sleep 4 && gh codespace ports visibility 5000:public -c $CODESPACE_NAME 2>/dev/null && echo '✅ TDS Sentinel HTTPS listo' || true",
   "customizations": {
     "vscode": {
       "extensions": [

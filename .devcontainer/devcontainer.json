@@ -5,9 +5,10 @@
   "forwardPorts": [5000, 8080],
   "portsAttributes": {
     "5000": {
-      "label": "Sentinel API (HTTPS)",
+      "label": "Sentinel API",
       "onAutoForward": "openBrowser",
-      "visibility": "public"
+      "visibility": "public",
+      "protocol": "http"
     },
     "8080": {
       "label": "Flutter Web",

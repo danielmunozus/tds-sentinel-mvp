@@ -2,7 +2,8 @@
 # =============================================================================
 # start.sh — TDS Sentinel API
 # =============================================================================
-# Usa supervisord para gestionar Flask con reinicio automático (elimina 502).
+# Usa supervisord para gestionar Flask con reinicio automático.
+# Flask sirve HTTP puro — el proxy de Codespaces provee HTTPS externamente.
 #
 # Uso:
 #   bash start.sh            → arranca (o reinicia) la API
@@ -23,16 +24,9 @@ VENV_PY="$ROOT_DIR/.venv/bin/python"
 VENV_SUPERVISORD="$ROOT_DIR/.venv/bin/supervisord"
 VENV_SUPERVISORCTL="$ROOT_DIR/.venv/bin/supervisorctl"
 SYS_PY="/usr/bin/python3"
-LOG_FILE="/tmp/sentinel_https.log"
-SUPERVISORD_LOG="/tmp/supervisord.log"
-SUPERVISORD_PID="/tmp/supervisord.pid"
+LOG_FILE="/tmp/sentinel.log"
 SUPERVISORD_CONF="$SCRIPT_DIR/supervisord.conf"
 PORT="${PORT:-5000}"
-
-# Certs en ubicación PERSISTENTE (sobreviven a reinicios del Codespace)
-CERTS_DIR="$ROOT_DIR/.certs"
-CERT="$CERTS_DIR/sentinel_cert.pem"
-KEY="$CERTS_DIR/sentinel_key.pem"
 
 # Usar venv si existe, sino Python del sistema
 if [[ -f "$VENV_PY" ]]; then
@@ -55,17 +49,11 @@ info() { echo -e "${BLUE}ℹ️   $*${NC}"; }
 cmd_stop() {
   echo "→ Deteniendo TDS Sentinel..."
   if [[ -f "$VENV_SUPERVISORCTL" ]]; then
-    "$VENV_SUPERVISORCTL" -c "$SUPERVISORD_CONF" stop sentinel 2>/dev/null || true
-    "$VENV_SUPERVISORCTL" -c "$SUPERVISORD_CONF" shutdown 2>/dev/null || true
-  fi
-  # Matar supervisord por PID si sigue corriendo
-  if [[ -f "$SUPERVISORD_PID" ]]; then
-    PID=$(cat "$SUPERVISORD_PID")
-    kill "$PID" 2>/dev/null && ok "supervisord detenido (PID $PID)" || true
-    rm -f "$SUPERVISORD_PID"
+    "$VENV_SUPERVISORCTL" -c "$SUPERVISORD_CONF" stop sentinel   2>/dev/null || true
+    "$VENV_SUPERVISORCTL" -c "$SUPERVISORD_CONF" shutdown        2>/dev/null || true
   fi
   pkill -f "supervisord" 2>/dev/null && ok "supervisord detenido" || warn "supervisord ya no corría"
-  pkill -f "start_https.py" 2>/dev/null || true
+  pkill -f "server.py"   2>/dev/null || true
   ok "API detenida"
 }
 
@@ -75,28 +63,24 @@ cmd_status() {
   echo "  TDS Sentinel — Estado"
   echo "══════════════════════════════════════════"
 
-  # Estado de supervisord
   if pgrep -f "supervisord" > /dev/null 2>&1; then
-    ok "supervisord corriendo (gestor de procesos activo)"
+    ok "supervisord corriendo (auto-restart activo)"
   else
     err "supervisord NO está corriendo"
   fi
 
-  # Estado de Flask vía health check
-  if curl -sk "https://127.0.0.1:${PORT}/api/health" > /dev/null 2>&1; then
-    ok "Flask respondiendo en https://127.0.0.1:${PORT}"
-    HEALTH=$(curl -sk "https://127.0.0.1:${PORT}/api/health")
-    echo "   → $HEALTH"
+  if curl -s "http://127.0.0.1:${PORT}/api/health" > /dev/null 2>&1; then
+    ok "Flask respondiendo en http://127.0.0.1:${PORT}"
+    curl -s "http://127.0.0.1:${PORT}/api/health" | "$PYTHON" -m json.tool 2>/dev/null || true
   else
     err "Flask NO responde en el puerto ${PORT}"
     echo "   Intenta: bash $SCRIPT_DIR/start.sh"
   fi
 
-  # URL pública de Codespaces
   if [[ -n "${CODESPACE_NAME:-}" ]]; then
     DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
     echo ""
-    info "URL pública: https://${CODESPACE_NAME}-${PORT}.${DOMAIN}"
+    info "URL pública (HTTPS via proxy): https://${CODESPACE_NAME}-${PORT}.${DOMAIN}"
   fi
   echo ""
 }
@@ -128,7 +112,7 @@ case "${1:-}" in
   --status)  cmd_status;  exit 0 ;;
   --logs)    cmd_logs;    exit 0 ;;
   --restart) cmd_restart; exit 0 ;;
-  "") ;;  # arranque normal
+  "") ;;
   *) echo "Uso: bash start.sh [--stop|--status|--logs|--restart]"; exit 1 ;;
 esac
 
@@ -138,70 +122,57 @@ esac
 
 echo ""
 echo "══════════════════════════════════════════"
-echo "  TDS Sentinel — Iniciando API"
+echo "  TDS Sentinel — Iniciando API (HTTP)"
 echo "══════════════════════════════════════════"
 
-# ── 1. Detener instancia previa de supervisord ────────────────────────────────
+# ── 1. Detener instancia previa ───────────────────────────────────────────────
 if pgrep -f "supervisord" > /dev/null 2>&1; then
   echo "→ Deteniendo supervisord previo..."
   pkill -f "supervisord" 2>/dev/null || true
   sleep 2
 fi
-pkill -f "start_https.py" 2>/dev/null || true
+pkill -f "server.py" 2>/dev/null || true
 sleep 1
 
-# ── 2. Certificados SSL en ubicación PERSISTENTE ──────────────────────────────
-# Usa gen_cert.py (Python puro, sin depender del binario openssl)
-echo "→ Verificando certificados SSL..."
-mkdir -p "$CERTS_DIR"
-"$PYTHON" "$SCRIPT_DIR/gen_cert.py" "$CERT" "$KEY"
-
-# ── 3. Verificar que .env existe con SECRET_KEY ───────────────────────────────
+# ── 2. Verificar que .env tiene SECRET_KEY ───────────────────────────────────
 if [[ ! -f "$SCRIPT_DIR/.env" ]]; then
   warn ".env no encontrado — copiando desde .env.example"
-  if [[ -f "$SCRIPT_DIR/.env.example" ]]; then
-    cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
-    NEW_KEY=$("$PYTHON" -c "import secrets; print(secrets.token_hex(32))")
-    sed -i "s/REEMPLAZA_CON_UN_VALOR_SECRETO_SEGURO/$NEW_KEY/" "$SCRIPT_DIR/.env"
-    ok ".env creado con SECRET_KEY generada"
-  else
-    err ".env.example no encontrado. Crea el archivo .env manualmente."
-    exit 1
-  fi
+  cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
+  NEW_KEY=$("$PYTHON" -c "import secrets; print(secrets.token_hex(32))")
+  sed -i "s/REEMPLAZA_CON_UN_VALOR_SECRETO_SEGURO/$NEW_KEY/" "$SCRIPT_DIR/.env"
+  ok ".env creado con SECRET_KEY generada"
 fi
 
-# Verificar que SECRET_KEY está definida
 if ! grep -q "^SECRET_KEY=.\+" "$SCRIPT_DIR/.env" 2>/dev/null; then
-  warn "SECRET_KEY no definida en .env — generando una..."
+  warn "SECRET_KEY no definida — generando..."
   NEW_KEY=$("$PYTHON" -c "import secrets; print(secrets.token_hex(32))")
   if grep -q "^SECRET_KEY" "$SCRIPT_DIR/.env"; then
     sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$NEW_KEY/" "$SCRIPT_DIR/.env"
   else
     echo "SECRET_KEY=$NEW_KEY" >> "$SCRIPT_DIR/.env"
   fi
-  ok "SECRET_KEY generada y guardada en .env"
+  ok "SECRET_KEY guardada en .env"
 fi
 
-# ── 4. Verificar que supervisord está disponible ──────────────────────────────
+# ── 3. Verificar que supervisord está disponible ──────────────────────────────
 if [[ ! -f "$VENV_SUPERVISORD" ]]; then
-  warn "supervisord no encontrado en .venv — instalando..."
+  warn "supervisord no encontrado — instalando..."
   "$ROOT_DIR/.venv/bin/pip" install supervisor -q
   ok "supervisor instalado"
 fi
 
-# ── 5. Lanzar supervisord (gestiona Flask con auto-restart) ───────────────────
-echo "→ Lanzando supervisord (Flask con auto-restart)..."
+# ── 4. Lanzar supervisord ────────────────────────────────────────────────────
+echo "→ Lanzando supervisord (Flask HTTP con auto-restart)..."
 "$VENV_SUPERVISORD" -c "$SUPERVISORD_CONF"
-echo "   PID supervisord guardado en $SUPERVISORD_PID"
 
-# ── 6. Esperar y verificar que Flask arrancó ──────────────────────────────────
+# ── 5. Esperar y verificar que Flask arrancó ──────────────────────────────────
 echo -n "→ Esperando que Flask responda"
 for i in $(seq 1 20); do
   sleep 1
   echo -n "."
-  if curl -sk "https://127.0.0.1:${PORT}/api/health" > /dev/null 2>&1; then
+  if curl -s "http://127.0.0.1:${PORT}/api/health" > /dev/null 2>&1; then
     echo ""
-    ok "Flask respondiendo en https://127.0.0.1:${PORT}"
+    ok "Flask respondiendo en http://127.0.0.1:${PORT}"
     break
   fi
   if [[ $i -eq 20 ]]; then
@@ -209,38 +180,35 @@ for i in $(seq 1 20); do
     err "Flask no respondió en 20 segundos"
     echo "   Últimas líneas del log:"
     tail -30 "$LOG_FILE" 2>/dev/null || true
-    echo ""
-    echo "   Estado supervisord:"
     "$VENV_SUPERVISORCTL" -c "$SUPERVISORD_CONF" status 2>/dev/null || true
     exit 1
   fi
 done
 
-# ── 7. Exponer el puerto como público en Codespaces ──────────────────────────
+# ── 6. Exponer el puerto como público en Codespaces ──────────────────────────
 if [[ -n "${CODESPACE_NAME:-}" ]]; then
+  DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
   echo "→ Configurando visibilidad pública del puerto $PORT..."
   gh codespace ports visibility "${PORT}:public" -c "$CODESPACE_NAME" 2>/dev/null \
     && ok "Puerto $PORT → público" \
-    || warn "No se pudo cambiar visibilidad (normal fuera de Codespaces CLI)"
+    || warn "gh CLI no disponible — marca el puerto como público en la UI de Codespaces"
 
-  DOMAIN="${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}"
-  PUBLIC_URL="https://${CODESPACE_NAME}-${PORT}.${DOMAIN}"
   echo ""
   echo "══════════════════════════════════════════"
-  ok "API disponible en:"
-  echo "   🌐 $PUBLIC_URL"
+  ok "API disponible (HTTPS via proxy) en:"
+  echo "   🌐 https://${CODESPACE_NAME}-${PORT}.${DOMAIN}"
   echo "══════════════════════════════════════════"
 else
   echo ""
-  ok "API disponible en: https://localhost:${PORT}"
+  ok "API disponible en: http://localhost:${PORT}"
 fi
 
 echo ""
 echo "Comandos útiles:"
 echo "  bash start.sh --status   → ver estado"
 echo "  bash start.sh --logs     → logs en tiempo real"
-echo "  bash start.sh --restart  → reiniciar Flask sin bajar supervisord"
+echo "  bash start.sh --restart  → reiniciar Flask"
 echo "  bash start.sh --stop     → detener todo"
-echo "  bash start.sh            → relanzar completo"
+echo "  bash start.sh            → relanzar"
 echo ""
-info "supervisord reinicia Flask automáticamente si cae → sin más 502"
+info "Flask HTTP · supervisord reinicia automáticamente si cae · HTTPS via proxy Codespaces"

@@ -74,16 +74,17 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: AppColors.navyDark,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            child: Column(
-              children: [
-                _buildLogo(),
-                const SizedBox(height: 4),
-                _buildCard(),
-              ],
-            ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 28),
+              _buildLogo(),
+              const SizedBox(height: 24),
+              _buildCard(),
+              const SizedBox(height: 24),
+            ],
           ),
         ),
       ),
@@ -95,14 +96,24 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         Image.asset(
           'assets/images/__TDS_LOGO_White.png',
-          height: 160,
+          height: 110,
           errorBuilder: (_, __, ___) => const Icon(
             Icons.shield_rounded,
-            size: 160,
+            size: 110,
             color: AppColors.white,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
+        const Text(
+          'Sentinel',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 38,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+          ),
+        ),
+        const SizedBox(height: 4),
         const Text(
           'Plataforma de Evaluación de Riesgo',
           style: TextStyle(color: Colors.white54, fontSize: 13),

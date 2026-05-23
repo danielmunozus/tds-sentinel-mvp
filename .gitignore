@@ -10,7 +10,7 @@ __pycache__/
 .Python
 *.egg-info/
 dist/
-build/
+/build/
 .eggs/
 
 # ── Entorno virtual ───────────────────────────────────────────────────────────
@@ -44,7 +44,13 @@ mobile/sentinel_mobile/.dart_tool/
 mobile/sentinel_mobile/.flutter-plugins
 mobile/sentinel_mobile/.flutter-plugins-dependencies
 mobile/sentinel_mobile/.packages
-mobile/sentinel_mobile/build/
+# build/web SÍ va al repo — Flask lo sirve como SPA estática
+mobile/sentinel_mobile/build/android/
+mobile/sentinel_mobile/build/ios/
+mobile/sentinel_mobile/build/linux/
+mobile/sentinel_mobile/build/macos/
+mobile/sentinel_mobile/build/windows/
+mobile/sentinel_mobile/.dart_tool/
 mobile/sentinel_mobile/android/.gradle/
 mobile/sentinel_mobile/android/local.properties
 mobile/sentinel_mobile/android/key.properties

@@ -30,7 +30,14 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+# build/web SÍ va al repo — Flask lo sirve como SPA estática.
+# Solo ignoramos los builds de plataformas nativas.
+/build/android/
+/build/ios/
+/build/linux/
+/build/macos/
+/build/windows/
+/build/app/
 /coverage/
 
 # Symbolication related

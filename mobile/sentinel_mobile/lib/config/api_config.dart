@@ -24,6 +24,7 @@ class ApiConfig {
   static String get assessments => '$baseUrl/assessments';
 
   static String get login          => '$baseUrl/auth/login';
+  static String get logout         => '$baseUrl/auth/logout';
   static String get forgotPassword => '$baseUrl/auth/forgot-password';
   static String get contact        => '$baseUrl/auth/contact';
 

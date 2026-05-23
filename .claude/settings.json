@@ -1,5 +1,14 @@
 {
   "permissions": {
-    "allow": []
+    "allow": [
+      "Bash(.venv/bin/python3 -m pytest backend/tests/ -v)",
+      "Bash(pkill -f \"python3 app.py\")",
+      "Bash(.venv/bin/python3 app.py)",
+      "Bash(pkill -f \"app.py\")",
+      "Bash(SECRET_KEY=pentest-verify-key-2026 .venv/bin/python3 app.py)",
+      "Bash(.venv/bin/python3 -)",
+      "Bash(ls /workspaces/tds-sentinel-mvp/.venv/bin/python3)",
+      "Read(//usr/bin/**)"
+    ]
   }
 }

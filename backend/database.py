@@ -1,10 +1,11 @@
 """
 database.py — TDS Sentinel API
-Schema v3.0.0
+Schema v3.1.0
   clients          — autenticación + datos empresariales completos
   risk_assessments — sin company_name/responsible_name, FK a clients
   support_tickets  — tickets de soporte (ej. reset de contraseña)
   contact_requests — solicitudes de cotización de nuevos clientes
+  sessions         — tokens de sesión para autenticación Bearer (NUEVO v3.1)
 """
 
 import hashlib
@@ -142,11 +143,22 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         )
     """)
 
+    # ── v3.1: Sesiones de autenticación ───────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            token      TEXT    NOT NULL UNIQUE,
+            client_id  INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            created_at TEXT    NOT NULL,
+            expires_at TEXT    NOT NULL
+        )
+    """)
+
     existing = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
     if existing == 0:
         conn.execute(
             "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-            ("3.0.0", datetime.now(timezone.utc).isoformat()),
+            ("3.1.0", datetime.now(timezone.utc).isoformat()),
         )
 
 
@@ -169,6 +181,10 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     if version in ("1.0.0", "2.0.0"):
         _migrate_to_v3(conn)
         logger.info("Migración %s → 3.0.0 completada.", version)
+        version = "3.0.0"
+    if version == "3.0.0":
+        _migrate_to_v31(conn)
+        logger.info("Migración 3.0.0 → 3.1.0 completada.")
 
 
 def _migrate_to_v3(conn: sqlite3.Connection) -> None:
@@ -327,3 +343,92 @@ def _migrate_to_v3(conn: sqlite3.Connection) -> None:
         "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
         ("3.0.0", now),
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Migración 3.0.0 → 3.1.0 (agrega tabla sessions)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _migrate_to_v31(conn: sqlite3.Connection) -> None:
+    """Crea la tabla sessions si no existe y registra la versión 3.1.0."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            token      TEXT    NOT NULL UNIQUE,
+            client_id  INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+            created_at TEXT    NOT NULL,
+            expires_at TEXT    NOT NULL
+        )
+    """)
+    conn.execute(
+        "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+        ("3.1.0", now),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Gestión de sesiones (autenticación Bearer)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def create_session(client_id: int) -> str:
+    """
+    Crea una nueva sesión para el cliente y devuelve el token Bearer.
+    Expira según Config.SESSION_HOURS (default: 24h).
+    """
+    from datetime import timedelta
+    token = secrets.token_urlsafe(32)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(hours=Config.SESSION_HOURS)
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO sessions (token, client_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token, client_id, now.isoformat(), expires.isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return token
+
+
+def get_client_by_token(token: str) -> dict | None:
+    """
+    Verifica el token Bearer y devuelve los datos del cliente si es válido y no expiró.
+    Devuelve None si el token no existe, expiró o el cliente está deshabilitado.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            """SELECT c.*
+               FROM   clients c
+               JOIN   sessions s ON s.client_id = c.id
+               WHERE  s.token = ?
+                 AND  s.expires_at > ?
+                 AND  c.client_status = 'enabled'""",
+            (token, now),
+        ).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def delete_session(token: str) -> None:
+    """Elimina la sesión activa (logout)."""
+    conn = get_db_connection()
+    try:
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_client_sessions(client_id: int) -> None:
+    """Elimina todas las sesiones de un cliente (útil al bloquear/deshabilitar cuenta)."""
+    conn = get_db_connection()
+    try:
+        conn.execute("DELETE FROM sessions WHERE client_id = ?", (client_id,))
+        conn.commit()
+    finally:
+        conn.close()

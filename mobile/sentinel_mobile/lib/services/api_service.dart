@@ -1,10 +1,12 @@
 // lib/services/api_service.dart — TDS Sentinel
 // Capa de servicio HTTP. Toda comunicación con Flask pasa por aquí.
+// v3.1: incluye Bearer token en todas las requests autenticadas.
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import '../models/app_state.dart';
 import '../models/assessment_pack.dart';
 import '../models/client.dart';
 import '../models/risk_assessment.dart';
@@ -25,15 +27,25 @@ class ApiService {
   http.Client _http = http.Client();
 
   /// Permite inyectar un [http.Client] alternativo en tests.
-  /// No usar fuera de tests (anotado con @visibleForTesting).
   @visibleForTesting
   // ignore: avoid_setters_without_getters
   set httpClientForTesting(http.Client client) => _http = client;
 
-  Map<String, String> get _headers => {
+  /// Headers base (sin auth) — solo para endpoints públicos.
+  Map<String, String> get _publicHeaders => {
     'Content-Type': 'application/json',
     'Accept':       'application/json',
   };
+
+  /// Headers autenticados — incluye Bearer token de la sesión activa.
+  Map<String, String> get _authHeaders {
+    final token = AppState.instance.token;
+    return {
+      'Content-Type':  'application/json',
+      'Accept':        'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
 
   dynamic _process(http.Response response) {
     final body = utf8.decode(response.bodyBytes);
@@ -48,11 +60,11 @@ class ApiService {
     throw ApiException(msg, statusCode: response.statusCode);
   }
 
-  // ── Health ─────────────────────────────────────────────────────────────────
+  // ── Health (público) ────────────────────────────────────────────────────────
 
   Future<bool> checkHealth() async {
     try {
-      final r = await _http.get(Uri.parse(ApiConfig.health), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.health), headers: _publicHeaders)
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as Map<String, dynamic>;
       return data['status'] == 'ok';
@@ -61,15 +73,20 @@ class ApiService {
     }
   }
 
-  // ── Auth ───────────────────────────────────────────────────────────────────
+  // ── Auth (público) ──────────────────────────────────────────────────────────
 
+  /// Login: devuelve el Client y almacena el token en AppState.
   Future<Client> login(String email, String password) async {
     try {
-      final r = await _http.post(Uri.parse(ApiConfig.login), headers: _headers,
+      final r = await _http.post(Uri.parse(ApiConfig.login), headers: _publicHeaders,
           body: json.encode({'email': email.trim(), 'password': password}))
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as Map<String, dynamic>;
-      return Client.fromJson(data);
+      final token  = data['token'] as String;
+      final client = Client.fromJson(data['client'] as Map<String, dynamic>);
+      // Almacenar sesión en AppState para que _authHeaders lo incluya automáticamente
+      AppState.instance.login(client, token);
+      return client;
     } on ApiException {
       rethrow;
     } catch (_) {
@@ -77,9 +94,21 @@ class ApiService {
     }
   }
 
+  /// Logout: invalida el token en el servidor y limpia AppState.
+  Future<void> logout() async {
+    try {
+      await _http.post(Uri.parse(ApiConfig.logout), headers: _authHeaders)
+          .timeout(ApiConfig.requestTimeout);
+    } catch (_) {
+      // Si falla la petición, igual limpiamos la sesión local
+    } finally {
+      AppState.instance.logout();
+    }
+  }
+
   Future<String> forgotPassword(String email) async {
     try {
-      final r = await _http.post(Uri.parse(ApiConfig.forgotPassword), headers: _headers,
+      final r = await _http.post(Uri.parse(ApiConfig.forgotPassword), headers: _publicHeaders,
           body: json.encode({'email': email.trim()}))
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as Map<String, dynamic>;
@@ -100,7 +129,7 @@ class ApiService {
     String? message,
   }) async {
     try {
-      final r = await _http.post(Uri.parse(ApiConfig.contact), headers: _headers,
+      final r = await _http.post(Uri.parse(ApiConfig.contact), headers: _publicHeaders,
           body: json.encode({
             'company_name':  companyName.trim(),
             'contact_name':  contactName.trim(),
@@ -120,11 +149,11 @@ class ApiService {
     }
   }
 
-  // ── Clients ────────────────────────────────────────────────────────────────
+  // ── Clients (autenticado) ───────────────────────────────────────────────────
 
   Future<List<Client>> fetchClients() async {
     try {
-      final r = await _http.get(Uri.parse(ApiConfig.clients), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.clients), headers: _authHeaders)
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as List<dynamic>;
       return data.map((c) => Client.fromJson(c as Map<String, dynamic>)).toList();
@@ -147,7 +176,7 @@ class ApiService {
     if (email.trim().isEmpty)       throw const ApiException('El email es requerido.');
     if (password.isEmpty)           throw const ApiException('La contraseña es requerida.');
     try {
-      final r = await _http.post(Uri.parse(ApiConfig.clients), headers: _headers,
+      final r = await _http.post(Uri.parse(ApiConfig.clients), headers: _authHeaders,
           body: json.encode({
             'company_name': companyName.trim(),
             'email':        email.trim(),
@@ -186,7 +215,7 @@ class ApiService {
       if (bsArea != null) payload['bs_area'] = bsArea.trim();
       if (clientStatus != null) payload['client_status'] = clientStatus;
       if (payload.isEmpty) throw const ApiException('No hay campos para actualizar.');
-      final r = await _http.put(Uri.parse(ApiConfig.clientById(id)), headers: _headers,
+      final r = await _http.put(Uri.parse(ApiConfig.clientById(id)), headers: _authHeaders,
           body: json.encode(payload))
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as Map<String, dynamic>;
@@ -200,7 +229,7 @@ class ApiService {
 
   Future<void> deleteClient(int id) async {
     try {
-      final r = await _http.delete(Uri.parse(ApiConfig.clientById(id)), headers: _headers)
+      final r = await _http.delete(Uri.parse(ApiConfig.clientById(id)), headers: _authHeaders)
           .timeout(ApiConfig.requestTimeout);
       _process(r);
     } on ApiException {
@@ -210,11 +239,11 @@ class ApiService {
     }
   }
 
-  // ── Packs ──────────────────────────────────────────────────────────────────
+  // ── Packs (público) ─────────────────────────────────────────────────────────
 
   Future<List<AssessmentPack>> fetchPacks() async {
     try {
-      final r = await _http.get(Uri.parse(ApiConfig.packs), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.packs), headers: _publicHeaders)
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as List<dynamic>;
       return data.map((p) => AssessmentPack.fromJson(p as Map<String, dynamic>)).toList();
@@ -225,11 +254,11 @@ class ApiService {
     }
   }
 
-  // ── Assessments ────────────────────────────────────────────────────────────
+  // ── Assessments (autenticado) ───────────────────────────────────────────────
 
   Future<List<RiskAssessment>> fetchAssessments() async {
     try {
-      final r = await _http.get(Uri.parse(ApiConfig.assessments), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.assessments), headers: _authHeaders)
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as List<dynamic>;
       return data.map((a) => RiskAssessment.fromJson(a as Map<String, dynamic>)).toList();
@@ -242,7 +271,7 @@ class ApiService {
 
   Future<List<RiskAssessment>> fetchClientAssessments(int clientId) async {
     try {
-      final r = await _http.get(Uri.parse(ApiConfig.clientAssessments(clientId)), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.clientAssessments(clientId)), headers: _authHeaders)
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as List<dynamic>;
       return data.map((a) => RiskAssessment.fromJson(a as Map<String, dynamic>)).toList();
@@ -255,7 +284,7 @@ class ApiService {
 
   Future<RiskAssessment> fetchAssessmentById(int id) async {
     try {
-      final r = await _http.get(Uri.parse(ApiConfig.assessmentById(id)), headers: _headers)
+      final r = await _http.get(Uri.parse(ApiConfig.assessmentById(id)), headers: _authHeaders)
           .timeout(ApiConfig.requestTimeout);
       final data = _process(r) as Map<String, dynamic>;
       return RiskAssessment.fromJson(data);
@@ -273,7 +302,7 @@ class ApiService {
   }) async {
     if (answers.isEmpty) throw const ApiException('Debe responder al menos un control.');
     try {
-      final r = await _http.post(Uri.parse(ApiConfig.assessments), headers: _headers,
+      final r = await _http.post(Uri.parse(ApiConfig.assessments), headers: _authHeaders,
           body: json.encode({
             'client_id': clientId,
             'pack_id':   packId,
@@ -291,7 +320,7 @@ class ApiService {
 
   Future<void> deleteAssessment(int id) async {
     try {
-      final r = await _http.delete(Uri.parse(ApiConfig.assessmentById(id)), headers: _headers)
+      final r = await _http.delete(Uri.parse(ApiConfig.assessmentById(id)), headers: _authHeaders)
           .timeout(ApiConfig.requestTimeout);
       _process(r);
     } on ApiException {

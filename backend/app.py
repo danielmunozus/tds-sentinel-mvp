@@ -44,8 +44,32 @@ def apply_cors_headers(response):
     if origin in Config.CORS_ORIGINS:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Vary"] = "Origin"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Accept"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Accept, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+
+@app.after_request
+def apply_security_headers(response):
+    # VULN-04: suprimir versión exacta del servidor
+    response.headers["Server"] = "TDS-Sentinel"
+    # VULN-06: cabeceras de seguridad estándar
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+    # CSP permisiva para Flutter Web (requiere unsafe-inline/eval para CanvasKit)
+    # Para producción con nginx, configurar CSP más restrictiva por ruta /api vs /
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self' blob: data:; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "worker-src 'self' blob:;"
+    )
     return response
 
 # ── Base de datos ─────────────────────────────────────────────────────────────

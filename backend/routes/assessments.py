@@ -1,13 +1,12 @@
 """
 routes/assessments.py — TDS Sentinel API
-CRUD de evaluaciones de riesgo (schema v3).
+CRUD de evaluaciones de riesgo (schema v3.1).
 
-POST   /assessments                  → crear (requiere client_id)
-GET    /assessments                  → listar todas (JOIN con clients)
-GET    /assessments/<id>             → detalle (JOIN con clients)
-PUT    /assessments/<id>             → no hay campos editables en v3 (solo admin)
-DELETE /assessments/<id>             → eliminar
-GET    /clients/<id>/assessments     → historial de un cliente
+POST   /assessments                  → crear (client_id debe ser el propio — VULN-02)
+GET    /assessments                  → listar las del cliente autenticado
+GET    /assessments/<id>             → detalle (solo propias)
+DELETE /assessments/<id>             → eliminar (solo propias)
+GET    /clients/<id>/assessments     → historial (solo propio client_id)
 """
 
 from __future__ import annotations
@@ -17,8 +16,9 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from flask import Blueprint, request
+from flask import Blueprint, g, request
 
+from auth_utils import login_required
 from database import get_db_connection
 from risk_engine import (
     calculate_risk_score,
@@ -54,7 +54,10 @@ def _error(msg: str, status: int):
 def _sanitize(value: str, field: str, required: bool = True) -> tuple[str, str | None]:
     if not isinstance(value, str):
         return "", f"El campo '{field}' debe ser texto."
+    # Elimina caracteres de control
     cleaned = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", value).strip()
+    # VULN-03: eliminar tags HTML para prevenir XSS stored
+    cleaned = re.sub(r"<[^>]*>", "", cleaned)
     if required and not cleaned:
         return "", f"El campo '{field}' es requerido."
     if len(cleaned) > MAX_TEXT:
@@ -107,9 +110,11 @@ def _generate_hash(client_id: int, pack_id: str, answers: dict, created_at: str)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @assessments_bp.route("/assessments", methods=["POST"])
+@login_required
 def create_assessment():
     """
     Body: { "client_id": 1, "pack_id": "infrastructure_basic", "answers": {...} }
+    VULN-02: client_id debe coincidir con el cliente autenticado.
     """
     data = request.get_json(silent=True)
     if not data:
@@ -118,6 +123,10 @@ def create_assessment():
     client_id = data.get("client_id")
     if not isinstance(client_id, int) or client_id <= 0:
         return _error("'client_id' es requerido y debe ser un entero positivo.", 400)
+
+    # Solo puede crear evaluaciones para su propio client_id
+    if client_id != g.current_client["id"]:
+        return _error("No autorizado para crear evaluaciones para otro cliente.", 403)
 
     conn = get_db_connection()
     try:
@@ -185,11 +194,15 @@ def create_assessment():
 # ──────────────────────────────────────────────────────────────────────────────
 
 @assessments_bp.route("/assessments", methods=["GET"])
+@login_required
 def list_assessments():
+    """Solo devuelve las evaluaciones del cliente autenticado."""
+    client_id = g.current_client["id"]
     conn = get_db_connection()
     try:
         rows = conn.execute(
-            f"{_SELECT_WITH_CLIENT} ORDER BY ra.created_at DESC"
+            f"{_SELECT_WITH_CLIENT} WHERE ra.client_id = ? ORDER BY ra.created_at DESC",
+            (client_id,),
         ).fetchall()
     finally:
         conn.close()
@@ -201,11 +214,15 @@ def list_assessments():
 # ──────────────────────────────────────────────────────────────────────────────
 
 @assessments_bp.route("/assessments/<int:assessment_id>", methods=["GET"])
+@login_required
 def get_assessment(assessment_id: int):
+    """Solo permite ver evaluaciones propias."""
+    client_id = g.current_client["id"]
     conn = get_db_connection()
     try:
         row = conn.execute(
-            f"{_SELECT_WITH_CLIENT} WHERE ra.id = ?", (assessment_id,)
+            f"{_SELECT_WITH_CLIENT} WHERE ra.id = ? AND ra.client_id = ?",
+            (assessment_id, client_id),
         ).fetchone()
     finally:
         conn.close()
@@ -219,11 +236,15 @@ def get_assessment(assessment_id: int):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @assessments_bp.route("/assessments/<int:assessment_id>", methods=["DELETE"])
+@login_required
 def delete_assessment(assessment_id: int):
+    """Solo permite eliminar evaluaciones propias."""
+    client_id = g.current_client["id"]
     conn = get_db_connection()
     try:
         existing = conn.execute(
-            "SELECT id FROM risk_assessments WHERE id = ?", (assessment_id,)
+            "SELECT id FROM risk_assessments WHERE id = ? AND client_id = ?",
+            (assessment_id, client_id),
         ).fetchone()
         if not existing:
             return _error(f"Evaluación {assessment_id} no encontrada.", 404)
@@ -231,7 +252,7 @@ def delete_assessment(assessment_id: int):
         conn.commit()
     finally:
         conn.close()
-    logger.info("Assessment eliminado — id=%d", assessment_id)
+    logger.info("Assessment eliminado — id=%d client_id=%d", assessment_id, client_id)
     return _success({"message": f"Evaluación {assessment_id} eliminada correctamente."})
 
 
@@ -240,7 +261,12 @@ def delete_assessment(assessment_id: int):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @assessments_bp.route("/clients/<int:client_id>/assessments", methods=["GET"])
+@login_required
 def client_assessments(client_id: int):
+    """Solo permite ver el historial del propio cliente."""
+    if g.current_client["id"] != client_id:
+        return _error("No autorizado para ver evaluaciones de otro cliente.", 403)
+
     conn = get_db_connection()
     try:
         client = conn.execute(

@@ -3,7 +3,8 @@ test_auth_login.py — TDS Sentinel API
 Tests de la ruta POST /api/auth/login.
 
 Cubre:
-  ✓ Login exitoso (usuario habilitado)
+  ✓ Login exitoso → devuelve { token, client }
+  ✓ Token es string no vacío
   ✓ Email case-insensitive
   ✓ No devuelve password_hash en la respuesta
   ✓ Body sin JSON / malformado
@@ -35,39 +36,58 @@ def post_login(client, email: str | None = None, password: str | None = None, **
     return client.post(URL, json=body)
 
 
+def get_client_data(response) -> dict:
+    """
+    Extrae los datos del cliente de la respuesta de login.
+    v3.1: respuesta es { "token": "...", "client": { ... } }
+    """
+    return response.get_json()["client"]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Casos exitosos
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestLoginExitoso:
-    """El usuario ingresa credenciales correctas y obtiene sus datos."""
+    """El usuario ingresa credenciales correctas y obtiene token + datos."""
 
-    def test_retorna_200_con_datos_del_cliente(self, client, usuario_activo):
+    def test_retorna_200_con_token_y_cliente(self, client, usuario_activo):
         r = post_login(client, usuario_activo["email"], usuario_activo["password"])
         assert r.status_code == 200
         data = r.get_json()
-        assert data["email"] == usuario_activo["email"]
-        assert data["company_name"] == "Empresa Test SA"
-        assert data["client_status"] == "enabled"
+        # Debe tener token y cliente en la respuesta
+        assert "token" in data, "Falta el campo 'token' en la respuesta"
+        assert "client" in data, "Falta el campo 'client' en la respuesta"
+        assert isinstance(data["token"], str) and len(data["token"]) > 10
+
+    def test_retorna_datos_correctos_del_cliente(self, client, usuario_activo):
+        r = post_login(client, usuario_activo["email"], usuario_activo["password"])
+        assert r.status_code == 200
+        cliente = get_client_data(r)
+        assert cliente["email"] == usuario_activo["email"]
+        assert cliente["company_name"] == "Empresa Test SA"
+        assert cliente["client_status"] == "enabled"
 
     def test_no_devuelve_password_hash(self, client, usuario_activo):
         """La respuesta nunca debe exponer el hash de la contraseña."""
         r = post_login(client, usuario_activo["email"], usuario_activo["password"])
         assert r.status_code == 200
-        assert "password_hash" not in r.get_json()
+        data = r.get_json()
+        assert "password_hash" not in data
+        assert "password_hash" not in data.get("client", {})
 
     def test_email_case_insensitive(self, client, usuario_activo):
         """El login funciona aunque el email venga en mayúsculas."""
         r = post_login(client, usuario_activo["email"].upper(), usuario_activo["password"])
         assert r.status_code == 200
-        assert r.get_json()["email"] == usuario_activo["email"]
+        assert get_client_data(r)["email"] == usuario_activo["email"]
 
     def test_respuesta_contiene_campos_obligatorios(self, client, usuario_activo):
         r = post_login(client, usuario_activo["email"], usuario_activo["password"])
-        data = r.get_json()
+        cliente = get_client_data(r)
         for campo in ("id", "company_name", "contact_name", "email",
                       "phone", "client_status", "created_at"):
-            assert campo in data, f"Falta el campo '{campo}' en la respuesta"
+            assert campo in cliente, f"Falta el campo '{campo}' en client"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

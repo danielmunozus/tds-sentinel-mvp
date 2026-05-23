@@ -2,7 +2,8 @@
 routes/auth.py — TDS Sentinel API
 Autenticación de clientes.
 
-POST /auth/login           → login con email + contraseña
+POST /auth/login           → login con email + contraseña → devuelve Bearer token
+POST /auth/logout          → invalida el token actual
 POST /auth/forgot-password → crea ticket de soporte para reset de contraseña
 POST /auth/contact         → solicitud de cotización (nuevo cliente potencial)
 """
@@ -10,11 +11,19 @@ POST /auth/contact         → solicitud de cotización (nuevo cliente potencial
 from __future__ import annotations
 import logging
 import re
+import uuid
 from datetime import datetime, timezone
 
-from flask import Blueprint, request
+from flask import Blueprint, g, request
 
-from database import get_db_connection, verify_password, validate_email, hash_password
+from database import (
+    get_db_connection,
+    verify_password,
+    validate_email,
+    hash_password,
+    create_session,
+    delete_session,
+)
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
@@ -35,7 +44,9 @@ def _error(msg: str, status: int):
 def _clean(value, field: str, required: bool = True) -> tuple[str, str | None]:
     if not isinstance(value, str):
         return "", f"El campo '{field}' debe ser texto."
+    # Elimina caracteres de control y tags HTML (VULN-03)
     cleaned = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", value).strip()
+    cleaned = re.sub(r"<[^>]*>", "", cleaned)
     if required and not cleaned:
         return "", f"El campo '{field}' es requerido."
     if len(cleaned) > MAX_TEXT:
@@ -56,7 +67,7 @@ def _client_public(row: dict) -> dict:
 def login():
     """
     Body: { "email": "...", "password": "..." }
-    Respuesta exitosa: datos del cliente (sin password_hash).
+    Respuesta exitosa: { "token": "...", "client": { datos del cliente } }
     """
     data = request.get_json(silent=True)
     if not data:
@@ -85,6 +96,7 @@ def login():
 
     client = dict(row)
 
+    # Verificar estado ANTES de validar contraseña (fail-fast + no timing leak)
     if client["client_status"] == "blocked":
         return _error("La cuenta está bloqueada. Contacte a soporte.", 403)
     if client["client_status"] == "disabled":
@@ -93,8 +105,34 @@ def login():
     if not verify_password(password, client["password_hash"]):
         return _error("Email o contraseña incorrectos.", 401)
 
+    # Crear sesión y emitir token Bearer
+    token = create_session(client["id"])
+
     logger.info("Login exitoso — client_id=%d email=%s", client["id"], email)
-    return _success(_client_public(client))
+    return _success({
+        "token":  token,
+        "client": _client_public(client),
+    })
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# POST /auth/logout
+# ──────────────────────────────────────────────────────────────────────────────
+
+@auth_bp.route("/auth/logout", methods=["POST"])
+def logout():
+    """
+    Invalida el token Bearer actual.
+    No requiere body. Lee el token del header Authorization.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if token:
+            delete_session(token)
+            logger.info("Logout — token invalidado")
+
+    return _success({"message": "Sesión cerrada correctamente."})
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -107,6 +145,7 @@ def forgot_password():
     Body: { "email": "..." }
     Crea un ticket de soporte tipo 'password_reset'.
     Responde con éxito siempre (no revela si el email existe).
+    Devuelve ticket_reference UUID (VULN-05: no expone ID secuencial).
     """
     data = request.get_json(silent=True)
     if not data:
@@ -119,6 +158,8 @@ def forgot_password():
         return _error("Formato de email inválido.", 400)
 
     now = datetime.now(timezone.utc).isoformat()
+    ticket_reference = str(uuid.uuid4())   # VULN-05: UUID en lugar de ID secuencial
+
     conn = get_db_connection()
     try:
         client_row = conn.execute(
@@ -126,21 +167,21 @@ def forgot_password():
         ).fetchone()
         client_id = client_row["id"] if client_row else None
 
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO support_tickets (email, client_id, type, status, created_at)
                VALUES (?, ?, 'password_reset', 'open', ?)""",
             (email, client_id, now),
         )
         conn.commit()
-        ticket_id = cur.lastrowid
     finally:
         conn.close()
 
-    logger.info("Ticket de reset creado — ticket_id=%d email=%s", ticket_id, email)
+    # No logueamos el email para evitar PII en logs
+    logger.info("Ticket de reset creado — reference=%s", ticket_reference)
     return _success({
         "message": "Se ha generado un ticket de soporte. "
                    "Un agente de TDS Innovate se pondrá en contacto a la brevedad.",
-        "ticket_id": ticket_id,
+        "ticket_reference": ticket_reference,
     })
 
 
@@ -160,6 +201,7 @@ def contact_request():
         "pack_interest": "infrastructure_basic",   (opcional)
         "message":       "..."                      (opcional)
     }
+    Devuelve request_reference UUID (VULN-05).
     """
     data = request.get_json(silent=True)
     if not data:
@@ -180,12 +222,14 @@ def contact_request():
     if err: return _error(err, 400)
 
     pack_interest, _ = _clean(data.get("pack_interest", ""), "pack_interest", required=False)
-    message, _      = _clean(data.get("message", ""), "message", required=False)
+    message, _       = _clean(data.get("message", ""), "message", required=False)
 
     now = datetime.now(timezone.utc).isoformat()
+    request_reference = str(uuid.uuid4())   # VULN-05: UUID en lugar de ID secuencial
+
     conn = get_db_connection()
     try:
-        cur = conn.execute(
+        conn.execute(
             """INSERT INTO contact_requests
                (company_name, contact_name, email, phone, pack_interest, message, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -193,13 +237,12 @@ def contact_request():
              pack_interest or None, message or None, now),
         )
         conn.commit()
-        req_id = cur.lastrowid
     finally:
         conn.close()
 
-    logger.info("Solicitud de contacto — id=%d empresa=%s", req_id, company_name)
+    logger.info("Solicitud de contacto — empresa=%s reference=%s", company_name, request_reference)
     return _success({
         "message": "Su solicitud ha sido recibida. "
                    "El equipo comercial de TDS Innovate se pondrá en contacto pronto.",
-        "request_id": req_id,
+        "request_reference": request_reference,
     }, 201)

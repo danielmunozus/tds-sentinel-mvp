@@ -54,9 +54,13 @@ class Config:
             if _cs_url not in CORS_ORIGINS:
                 CORS_ORIGINS.append(_cs_url)
 
+    # ── Sesiones ───────────────────────────────────────────────────────────
+    # Duración de las sesiones en horas. Configurable via SESSION_HOURS en .env.
+    SESSION_HOURS: int = int(os.getenv("SESSION_HOURS", "24"))
+
     # ── API ────────────────────────────────────────────────────────────────
     API_PREFIX: str = "/api"
-    API_VERSION: str = "1.0.0"
+    API_VERSION: str = "3.2.0"
     APP_NAME: str = "TDS Sentinel API"
 
     @classmethod

@@ -1,21 +1,28 @@
 """
 routes/clients.py — TDS Sentinel API
-CRUD de clientes con schema v3.
+CRUD de clientes con schema v3.1.
 
-GET    /clients              → listar
-POST   /clients              → crear (password_hash, email único, validación formato email)
-GET    /clients/<id>         → detalle
-PUT    /clients/<id>         → actualizar (no expone password_hash)
-DELETE /clients/<id>         → eliminar (409 si tiene assessments)
+GET    /clients              → perfil propio (requiere auth)
+POST   /clients              → crear (requiere auth)
+GET    /clients/<id>         → detalle (solo propio — FIX-IDOR)
+PUT    /clients/<id>         → actualizar (solo propio perfil — FIX-IDOR)
+DELETE /clients/<id>         → eliminar (solo propio perfil — FIX-IDOR)
+
+Fixes v3.2:
+  FIX-TOCTOU    : IntegrityError en INSERT → 409 en vez de 500
+  FIX-IDOR      : GET /clients y GET /clients/<id> ahora solo devuelven el perfil propio
+  FIX-SELFLOCKOUT: PUT no permite cambiar client_status (operación de admin)
 """
 
 from __future__ import annotations
 import logging
 import re
+import sqlite3
 from datetime import datetime, timezone
 
-from flask import Blueprint, request
+from flask import Blueprint, g, request
 
+from auth_utils import login_required
 from database import get_db_connection, hash_password, validate_email, VALID_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -37,7 +44,10 @@ def _error(msg: str, status: int):
 def _sanitize(value, field: str, required: bool = True) -> tuple[str, str | None]:
     if not isinstance(value, str):
         return "", f"El campo '{field}' debe ser texto."
+    # Elimina caracteres de control
     cleaned = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", value).strip()
+    # VULN-03: eliminar tags HTML para prevenir XSS stored
+    cleaned = re.sub(r"<[^>]*>", "", cleaned)
     if required and not cleaned:
         return "", f"El campo '{field}' es requerido."
     if len(cleaned) > MAX_TEXT:
@@ -54,15 +64,23 @@ def _public(row: dict) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 @clients_bp.route("/clients", methods=["GET"])
+@login_required
 def list_clients():
+    """
+    FIX-IDOR: En el MVP no existe rol admin — devolver todos los clientes
+    expone datos de terceros a cualquier usuario autenticado.
+    Ahora devuelve exclusivamente el perfil del cliente autenticado.
+    """
     conn = get_db_connection()
     try:
-        rows = conn.execute(
-            "SELECT * FROM clients ORDER BY company_name ASC"
-        ).fetchall()
+        row = conn.execute(
+            "SELECT * FROM clients WHERE id = ?", (g.current_client["id"],)
+        ).fetchone()
     finally:
         conn.close()
-    return _success([_public(dict(r)) for r in rows])
+    if not row:
+        return _success([])
+    return _success([_public(dict(row))])
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -70,6 +88,7 @@ def list_clients():
 # ──────────────────────────────────────────────────────────────────────────────
 
 @clients_bp.route("/clients", methods=["POST"])
+@login_required
 def create_client():
     """
     Body:
@@ -115,27 +134,31 @@ def create_client():
     now = datetime.now(timezone.utc).isoformat()
     conn = get_db_connection()
     try:
-        # Verificar email único
         existing = conn.execute(
             "SELECT id FROM clients WHERE LOWER(email) = LOWER(?)", (email,)
         ).fetchone()
         if existing:
             return _error("Ya existe un cliente con ese email.", 409)
 
-        cur = conn.execute(
-            """INSERT INTO clients
-               (company_name, contact_name, email, phone, password_hash,
-                bs_area, client_status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (company_name, contact_name, email, phone,
-             hash_password(password), bs_area, client_status, now),
-        )
-        conn.commit()
+        try:
+            cur = conn.execute(
+                """INSERT INTO clients
+                   (company_name, contact_name, email, phone, password_hash,
+                    bs_area, client_status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (company_name, contact_name, email, phone,
+                 hash_password(password), bs_area, client_status, now),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            # FIX-TOCTOU: la SELECT previa pudo pasar pero el INSERT falló por
+            # UNIQUE constraint (race condition entre dos requests concurrentes).
+            return _error("Ya existe un cliente con ese email.", 409)
         row = conn.execute("SELECT * FROM clients WHERE id = ?", (cur.lastrowid,)).fetchone()
     finally:
         conn.close()
 
-    logger.info("Cliente creado — id=%d email=%s", row["id"], email)
+    logger.info("Cliente creado — id=%d", row["id"])
     return _success(_public(dict(row)), 201)
 
 
@@ -144,7 +167,15 @@ def create_client():
 # ──────────────────────────────────────────────────────────────────────────────
 
 @clients_bp.route("/clients/<int:client_id>", methods=["GET"])
+@login_required
 def get_client(client_id: int):
+    """
+    FIX-IDOR: sin este check cualquier usuario autenticado podía leer el
+    perfil (email, teléfono, empresa) de cualquier otro cliente.
+    """
+    if g.current_client["id"] != client_id:
+        return _error("No autorizado para ver este perfil.", 403)
+
     conn = get_db_connection()
     try:
         row = conn.execute(
@@ -162,8 +193,15 @@ def get_client(client_id: int):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @clients_bp.route("/clients/<int:client_id>", methods=["PUT"])
+@login_required
 def update_client(client_id: int):
-    """Actualiza campos editables. Para cambiar contraseña incluir 'password' en el body."""
+    """
+    VULN-02: solo el cliente autenticado puede modificar su propio perfil.
+    """
+    # Verificar que solo modifica su propio perfil
+    if g.current_client["id"] != client_id:
+        return _error("No autorizado para modificar este perfil.", 403)
+
     data = request.get_json(silent=True)
     if not data:
         return _error("El cuerpo debe ser JSON válido.", 400)
@@ -198,9 +236,13 @@ def update_client(client_id: int):
     bs_area, err = _sanitize(data.get("bs_area", ex["bs_area"]), "bs_area")
     if err: return _error(err, 400)
 
-    client_status = data.get("client_status", ex["client_status"])
-    if client_status not in VALID_STATUSES:
-        return _error(f"Estado inválido. Valores aceptados: {sorted(VALID_STATUSES)}", 400)
+    # FIX-SELFLOCKOUT: client_status es una operación de administrador.
+    # Un cliente autenticado NO puede modificar su propio estado — haría
+    # un self-lockout permanente (blocked/disabled) sin posibilidad de recuperación
+    # a través de la API (no hay endpoint de recuperación en el MVP).
+    client_status = ex["client_status"]                     # forzamos el valor actual
+    if "client_status" in data and data["client_status"] != ex["client_status"]:
+        return _error("No puede modificar el estado de su propia cuenta.", 403)
 
     # Contraseña opcional en update
     new_password = data.get("password")
@@ -214,7 +256,6 @@ def update_client(client_id: int):
     now = datetime.now(timezone.utc).isoformat()
     conn = get_db_connection()
     try:
-        # Verificar unicidad de email si cambió
         if email.lower() != ex["email"].lower():
             dup = conn.execute(
                 "SELECT id FROM clients WHERE LOWER(email) = LOWER(?) AND id != ?",
@@ -244,7 +285,14 @@ def update_client(client_id: int):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @clients_bp.route("/clients/<int:client_id>", methods=["DELETE"])
+@login_required
 def delete_client(client_id: int):
+    """
+    VULN-02: solo el cliente autenticado puede eliminar su propio perfil.
+    """
+    if g.current_client["id"] != client_id:
+        return _error("No autorizado para eliminar este perfil.", 403)
+
     conn = get_db_connection()
     try:
         existing = conn.execute(

@@ -5,3 +5,9 @@ Flask>=3.0.0
 Flask-CORS>=4.0.0
 python-dotenv>=1.0.0
 Werkzeug>=3.0.0
+
+# Process supervisor — reinicio automático de Flask (elimina el 502)
+supervisor>=4.3.0
+
+# Generación de certificados SSL sin depender del binario openssl
+cryptography>=41.0.0

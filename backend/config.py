@@ -42,6 +42,18 @@ class Config:
     _cors_raw: str = os.getenv("CORS_ORIGINS", "http://localhost:5000,http://127.0.0.1:5000")
     CORS_ORIGINS: list[str] = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 
+    # Auto-detectar URLs de GitHub Codespaces (se añaden automáticamente
+    # sin necesidad de hardcodearlas en .env — sobreviven a cambios de nombre).
+    _codespace: str = os.getenv("CODESPACE_NAME", "")
+    _cs_domain: str = os.getenv(
+        "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.github.dev"
+    )
+    if _codespace:
+        for _port in [5000, 8080, 3000]:
+            _cs_url = f"https://{_codespace}-{_port}.{_cs_domain}"
+            if _cs_url not in CORS_ORIGINS:
+                CORS_ORIGINS.append(_cs_url)
+
     # ── API ────────────────────────────────────────────────────────────────
     API_PREFIX: str = "/api"
     API_VERSION: str = "1.0.0"

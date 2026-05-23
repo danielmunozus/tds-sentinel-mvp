@@ -25,8 +25,11 @@ sys.path.insert(0, BACKEND_DIR)
 from dotenv import load_dotenv
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
-CERT = os.getenv("SSL_CERT", "/tmp/sentinel_cert.pem")
-KEY  = os.getenv("SSL_KEY",  "/tmp/sentinel_key.pem")
+# Primero busca las variables de entorno; si no hay, usa la ubicación
+# PERSISTENTE en el workspace (no /tmp que se borra al reiniciar).
+_default_certs = os.path.join(BACKEND_DIR, "..", ".certs")
+CERT = os.getenv("SSL_CERT", os.path.join(_default_certs, "sentinel_cert.pem"))
+KEY  = os.getenv("SSL_KEY",  os.path.join(_default_certs, "sentinel_key.pem"))
 PORT = int(os.getenv("PORT", 5000))
 
 # ── Validar que existen los certificados ─────────────────────────────────────

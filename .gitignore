@@ -1,0 +1,69 @@
+# =============================================================================
+# .gitignore — TDS Sentinel MVP
+# =============================================================================
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Entorno virtual ───────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Variables de entorno y secretos ──────────────────────────────────────────
+backend/.env
+!backend/.env.example
+
+# ── Certificados SSL (generados localmente, NO al repositorio) ────────────────
+.certs/
+*.pem
+*.key
+*.crt
+
+# ── Base de datos local ───────────────────────────────────────────────────────
+backend/sentinel.db
+backend/*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Flutter / Dart ────────────────────────────────────────────────────────────
+mobile/sentinel_mobile/.dart_tool/
+mobile/sentinel_mobile/.flutter-plugins
+mobile/sentinel_mobile/.flutter-plugins-dependencies
+mobile/sentinel_mobile/.packages
+mobile/sentinel_mobile/build/
+mobile/sentinel_mobile/android/.gradle/
+mobile/sentinel_mobile/android/local.properties
+mobile/sentinel_mobile/android/key.properties
+mobile/sentinel_mobile/ios/Pods/
+mobile/sentinel_mobile/ios/.symlinks/
+mobile/sentinel_mobile/ios/Flutter/Flutter.framework/
+mobile/sentinel_mobile/ios/Flutter/Flutter.podspec
+
+# ── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Supervisor (runtime, no config) ──────────────────────────────────────────
+# supervisord.conf SÍ va al repo, los archivos runtime no

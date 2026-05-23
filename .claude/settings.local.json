@@ -85,7 +85,13 @@
       "Bash(bash -x /workspaces/tds-sentinel-mvp/backend/start.sh)",
       "Bash(SSL_CERT=/tmp/sentinel_cert.pem SSL_KEY=/tmp/sentinel_key.pem /workspaces/tds-sentinel-mvp/.venv/bin/python /workspaces/tds-sentinel-mvp/backend/start_https.py)",
       "Bash(git commit -m 'feat: script de arranque HTTPS para Codespaces \\(start.sh + start_https.py\\) *)",
-      "Bash(git -c commit.gpgsign=false commit -m 'feat: script de arranque HTTPS para Codespaces \\(start.sh + start_https.py\\) *)"
+      "Bash(git -c commit.gpgsign=false commit -m 'feat: script de arranque HTTPS para Codespaces \\(start.sh + start_https.py\\) *)",
+      "Bash(supervisord --version)",
+      "Bash(/workspaces/tds-sentinel-mvp/.venv/bin/pip show *)",
+      "Bash(/workspaces/tds-sentinel-mvp/.venv/bin/python --version)",
+      "Bash(/workspaces/tds-sentinel-mvp/.venv/bin/pip list *)",
+      "Bash(pip3 show *)",
+      "Read(//proc/2867/net/**)"
     ],
     "additionalDirectories": [
       "/workspaces/tds-sentinel-mvp/backend"

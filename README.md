@@ -190,7 +190,7 @@ La base de datos incluye migración automática desde schemas v1.x y v2.x al ini
 | **Autenticación Bearer** | `login_required` en todos los endpoints sensibles; token de 32 bytes URL-safe, expiración configurable |
 | **Ownership enforcement** | Todos los recursos (clientes, evaluaciones) solo accesibles por su propietario |
 | **IDOR prevention** | GET /clients y GET /clients/\<id\> filtrados al cliente autenticado; cualquier otro → 403 |
-| **Logout activo** | `DELETE /auth/logout` invalida el token en la tabla `sessions` |
+| **Logout activo** | `POST /auth/logout` invalida el token en la tabla `sessions` |
 | **Self-lockout prevention** | `PUT /clients/<id>` rechaza cambios de `client_status` (operación de admin) |
 | **TOCTOU race condition** | `INSERT` envuelto en `try/except IntegrityError` → 409 determinista |
 | SQL Injection | Queries parametrizadas en todos los endpoints |

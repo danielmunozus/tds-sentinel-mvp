@@ -1,0 +1,39 @@
+{
+  "name": "TDS Sentinel MVP",
+  "image": "ghcr.io/cirruslabs/flutter:stable",
+
+  "forwardPorts": [5000, 8080],
+  "portsAttributes": {
+    "5000": {
+      "label": "Sentinel API",
+      "onAutoForward": "openBrowser",
+      "visibility": "public",
+      "protocol": "http"
+    },
+    "8080": {
+      "label": "Flutter Web",
+      "onAutoForward": "notify"
+    }
+  },
+
+  "postCreateCommand": {
+    "venv-setup":   "cd /workspaces/tds-sentinel-mvp && (test -d .venv || /usr/bin/python3 -m venv .venv) && .venv/bin/pip install -r backend/requirements.txt -q && echo '✅ venv listo'",
+    "env-setup":    "cd /workspaces/tds-sentinel-mvp/backend && (test -f .env || (cp .env.example .env && /usr/bin/python3 -c \"import secrets; content=open('.env').read().replace('REEMPLAZA_CON_UN_VALOR_SECRETO_SEGURO', secrets.token_hex(32)); open('.env','w').write(content)\")) && echo '✅ .env listo'",
+    "flutter-deps": "cd /workspaces/tds-sentinel-mvp/mobile/sentinel_mobile && flutter pub get && echo '✅ Flutter deps listos'"
+  },
+
+  "postStartCommand": "bash /workspaces/tds-sentinel-mvp/backend/start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "Dart-Code.flutter",
+        "Dart-Code.dart-code"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/tds-sentinel-mvp/.venv/bin/python"
+      }
+    }
+  }
+}

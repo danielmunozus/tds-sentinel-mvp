@@ -1,153 +1,146 @@
+"""
+app.py — TDS Sentinel API
+Punto de entrada principal. Flask + Blueprints + SQLite.
+Arquitectura: Flutter Web → Flask (static + API) → SQLite
+"""
+
+import logging
 import os
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from database import get_db_connection, init_db
+from flask import Flask, jsonify, request, send_from_directory
+from config import Config
+from database import init_db
 
-app = Flask(__name__)
+FLUTTER_DIR = os.path.abspath(Config.FLUTTER_BUILD_DIR)
 
-# En producción, fijar CORS_ORIGINS a los dominios permitidos.
-_cors_origins = os.getenv("CORS_ORIGINS", "*")
-CORS(app, origins=_cors_origins)
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.DEBUG if Config.DEBUG else logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
+# ── Validación temprana de configuración ─────────────────────────────────────
+Config.validate()
+
+# ── App ───────────────────────────────────────────────────────────────────────
+app = Flask(__name__, static_folder=FLUTTER_DIR, static_url_path="")
+app.config["SECRET_KEY"] = Config.SECRET_KEY
+app.config["DEBUG"] = Config.DEBUG
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+try:
+    from flask_cors import CORS
+    CORS(app, origins=Config.CORS_ORIGINS, supports_credentials=False,
+         allow_headers=["Content-Type", "Accept"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    logger.info("CORS via flask-cors → %s", Config.CORS_ORIGINS)
+except ImportError:
+    logger.warning("flask-cors no disponible — CORS manual activo.")
+
+@app.after_request
+def apply_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    if origin in Config.CORS_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Accept, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+
+@app.after_request
+def apply_security_headers(response):
+    # VULN-04: suprimir versión exacta del servidor
+    response.headers["Server"] = "TDS-Sentinel"
+    # VULN-06: cabeceras de seguridad estándar
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+    # CSP permisiva para Flutter Web (requiere unsafe-inline/eval para CanvasKit)
+    # Para producción con nginx, configurar CSP más restrictiva por ruta /api vs /
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self' blob: data:; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "worker-src 'self' blob:;"
+    )
+    return response
+
+# ── Base de datos ─────────────────────────────────────────────────────────────
 init_db()
 
-_VALID_RISK_LEVELS = {"Low", "Medium", "High", "Critical"}
-_MAX_FIELD_LEN = 500
+# ── Utilidades de respuesta ───────────────────────────────────────────────────
+def success_response(data, status_code: int = 200):
+    return jsonify(data), status_code
 
+def error_response(message: str, status_code: int):
+    return jsonify({"error": message}), status_code
 
-def _validate_payload(data):
-    """
-    Valida el cuerpo JSON de creación/actualización.
-    Retorna (mensaje_error, None) o (None, datos_limpios).
-    """
-    if not data or not isinstance(data, dict):
-        return "Request body must be a JSON object", None
+# ── Error handlers globales (siempre JSON, nunca HTML) ────────────────────────
+@app.errorhandler(400)
+def bad_request(e):
+    return error_response("Solicitud inválida.", 400)
 
-    required = ["company_name", "asset_name", "risk_level", "recommendation"]
-    missing = [f for f in required if f not in data]
-    if missing:
-        return f"Missing required fields: {', '.join(missing)}", None
+@app.errorhandler(404)
+def not_found(e):
+    # Las rutas /api/* devuelven JSON; el resto sirve Flutter SPA.
+    if request.path.startswith(Config.API_PREFIX):
+        return error_response("Recurso no encontrado.", 404)
+    return send_from_directory(FLUTTER_DIR, "index.html")
 
-    for field in ("company_name", "asset_name", "recommendation"):
-        value = data[field]
-        if not isinstance(value, str) or not value.strip():
-            return f"Field '{field}' must be a non-empty string", None
-        if len(value) > _MAX_FIELD_LEN:
-            return f"Field '{field}' exceeds maximum length of {_MAX_FIELD_LEN}", None
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return error_response("Método no permitido.", 405)
 
-    if data["risk_level"] not in _VALID_RISK_LEVELS:
-        levels = ", ".join(sorted(_VALID_RISK_LEVELS))
-        return f"risk_level must be one of: {levels}", None
+@app.errorhandler(500)
+def internal_error(e):
+    logger.error("Error interno: %s", e)
+    return error_response("Error interno del servidor.", 500)
 
-    return None, {
-        "company_name": data["company_name"].strip(),
-        "asset_name": data["asset_name"].strip(),
-        "risk_level": data["risk_level"],
-        "recommendation": data["recommendation"].strip(),
-    }
+# ── Blueprints ────────────────────────────────────────────────────────────────
+from routes.packs import packs_bp
+from routes.assessments import assessments_bp
+from routes.clients import clients_bp
+from routes.auth import auth_bp
 
+app.register_blueprint(packs_bp,       url_prefix=Config.API_PREFIX)
+app.register_blueprint(assessments_bp, url_prefix=Config.API_PREFIX)
+app.register_blueprint(clients_bp,     url_prefix=Config.API_PREFIX)
+app.register_blueprint(auth_bp,        url_prefix=Config.API_PREFIX)
 
-@app.route("/api/health", methods=["GET"])
+# ── Health Check ──────────────────────────────────────────────────────────────
+@app.route(f"{Config.API_PREFIX}/health", methods=["GET"])
 def health_check():
-    return jsonify({"status": "ok", "message": "Sentinel API is running"}), 200
+    return success_response({
+        "status":  "ok",
+        "message": f"{Config.APP_NAME} is running",
+        "version": Config.API_VERSION,
+    })
 
+# ── Flutter Web — ruta raíz y catch-all para SPA ─────────────────────────────
+@app.route("/")
+def serve_flutter():
+    return send_from_directory(FLUTTER_DIR, "index.html")
 
-@app.route("/api/assessments", methods=["GET"])
-def get_assessments():
-    conn = get_db_connection()
-    try:
-        rows = conn.execute(
-            "SELECT * FROM risk_assessments ORDER BY created_at DESC"
-        ).fetchall()
-        return jsonify([dict(row) for row in rows]), 200
-    except Exception:
-        app.logger.exception("GET /api/assessments failed")
-        return jsonify({"error": "Internal server error"}), 500
-    finally:
-        conn.close()
+@app.route("/<path:path>")
+def serve_flutter_assets(path):
+    # Archivos estáticos que existan se sirven directamente.
+    # Rutas de la SPA que no sean archivos devuelven index.html.
+    if path.startswith("api/"):
+        return error_response("Recurso no encontrado.", 404)
+    full = os.path.join(FLUTTER_DIR, path)
+    if os.path.isfile(full):
+        return send_from_directory(FLUTTER_DIR, path)
+    return send_from_directory(FLUTTER_DIR, "index.html")
 
-
-@app.route("/api/assessments", methods=["POST"])
-def create_assessment():
-    data = request.get_json(silent=True)
-    error, clean = _validate_payload(data)
-    if error:
-        return jsonify({"error": error}), 400
-
-    conn = get_db_connection()
-    try:
-        cursor = conn.execute(
-            """
-            INSERT INTO risk_assessments (company_name, asset_name, risk_level, recommendation)
-            VALUES (?, ?, ?, ?)
-            """,
-            (clean["company_name"], clean["asset_name"], clean["risk_level"], clean["recommendation"]),
-        )
-        conn.commit()
-        row = conn.execute(
-            "SELECT * FROM risk_assessments WHERE id = ?", (cursor.lastrowid,)
-        ).fetchone()
-        return jsonify(dict(row)), 201
-    except Exception:
-        app.logger.exception("POST /api/assessments failed")
-        return jsonify({"error": "Internal server error"}), 500
-    finally:
-        conn.close()
-
-
-@app.route("/api/assessments/<int:assessment_id>", methods=["PUT"])
-def update_assessment(assessment_id):
-    data = request.get_json(silent=True)
-    error, clean = _validate_payload(data)
-    if error:
-        return jsonify({"error": error}), 400
-
-    conn = get_db_connection()
-    try:
-        if not conn.execute(
-            "SELECT id FROM risk_assessments WHERE id = ?", (assessment_id,)
-        ).fetchone():
-            return jsonify({"error": "Assessment not found"}), 404
-
-        conn.execute(
-            """
-            UPDATE risk_assessments
-            SET company_name = ?, asset_name = ?, risk_level = ?, recommendation = ?
-            WHERE id = ?
-            """,
-            (clean["company_name"], clean["asset_name"], clean["risk_level"], clean["recommendation"], assessment_id),
-        )
-        conn.commit()
-        row = conn.execute(
-            "SELECT * FROM risk_assessments WHERE id = ?", (assessment_id,)
-        ).fetchone()
-        return jsonify(dict(row)), 200
-    except Exception:
-        app.logger.exception("PUT /api/assessments/%s failed", assessment_id)
-        return jsonify({"error": "Internal server error"}), 500
-    finally:
-        conn.close()
-
-
-@app.route("/api/assessments/<int:assessment_id>", methods=["DELETE"])
-def delete_assessment(assessment_id):
-    conn = get_db_connection()
-    try:
-        if not conn.execute(
-            "SELECT id FROM risk_assessments WHERE id = ?", (assessment_id,)
-        ).fetchone():
-            return jsonify({"error": "Assessment not found"}), 404
-
-        conn.execute("DELETE FROM risk_assessments WHERE id = ?", (assessment_id,))
-        conn.commit()
-        return jsonify({"message": "Assessment deleted successfully"}), 200
-    except Exception:
-        app.logger.exception("DELETE /api/assessments/%s failed", assessment_id)
-        return jsonify({"error": "Internal server error"}), 500
-    finally:
-        conn.close()
-
-
+# ── Punto de entrada ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    app.run(debug=debug_mode)
+    port = int(os.getenv("PORT", 5000))
+    logger.info("Iniciando %s en http://0.0.0.0:%d", Config.APP_NAME, port)
+    app.run(host="0.0.0.0", port=port, debug=Config.DEBUG)

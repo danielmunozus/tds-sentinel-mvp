@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash /workspaces/tds-sentinel-mvp/backend/start.sh)",
+      "Bash(bash /workspaces/tds-sentinel-mvp/backend/start.sh --status)",
+      "Bash(bash /workspaces/tds-sentinel-mvp/backend/start.sh --stop)",
+      "Bash(bash /workspaces/tds-sentinel-mvp/backend/start.sh --logs)",
+      "Bash(bash /workspaces/tds-sentinel-mvp/backend/start.sh --restart)",
+      "Bash(/workspaces/tds-sentinel-mvp/.venv/bin/supervisorctl -c /workspaces/tds-sentinel-mvp/backend/supervisord.conf *)",
+      "Bash(/workspaces/tds-sentinel-mvp/.venv/bin/pip install -r /workspaces/tds-sentinel-mvp/backend/requirements.txt *)",
+      "Bash(/workspaces/tds-sentinel-mvp/.venv/bin/python -m pytest *)",
+      "Bash(curl -s http://127.0.0.1:5000/api/health)",
+      "Bash(bash /workspaces/tds-sentinel-mvp/rebuild_web.sh)",
+      "Bash(flutter build web *)",
+      "Bash(flutter pub get)",
+      "Bash(sudo apk add --no-cache *)"
+    ]
+  }
+}

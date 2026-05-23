@@ -240,6 +240,23 @@ def _migrate_to_v3(conn: sqlite3.Connection) -> None:
 
         conn.execute("DROP TABLE clients_legacy")
 
+        # Recrear support_tickets después de renombrar clients para que la FK
+        # apunte a la nueva tabla "clients" y no a la eliminada "clients_legacy".
+        # SQLite actualiza automáticamente las FKs al hacer RENAME, por lo que
+        # hay que recrear manualmente cualquier tabla que la referenciara.
+        conn.execute("DROP TABLE IF EXISTS support_tickets")
+        conn.execute("""
+            CREATE TABLE support_tickets (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                email      TEXT    NOT NULL,
+                client_id  INTEGER REFERENCES clients(id),
+                type       TEXT    NOT NULL DEFAULT 'password_reset',
+                status     TEXT    NOT NULL DEFAULT 'open',
+                created_at TEXT    NOT NULL,
+                updated_at TEXT
+            )
+        """)
+
     # ── Migrar risk_assessments ───────────────────────────────────────────────
     if "risk_assessments" in tables:
         conn.execute("ALTER TABLE risk_assessments RENAME TO risk_assessments_legacy")

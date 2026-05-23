@@ -79,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 52),
+              const SizedBox(height: 32),
               _buildLogo(),
               const SizedBox(height: 24),
               _buildCard(),
@@ -96,14 +96,14 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         Image.asset(
           'assets/images/__TDS_LOGO_White.png',
-          height: 360,
+          height: 216,
           errorBuilder: (_, __, ___) => const Icon(
             Icons.shield_rounded,
-            size: 360,
+            size: 216,
             color: AppColors.white,
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 10),
         const Text(
           'Sentinel',
           style: TextStyle(

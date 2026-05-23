@@ -76,11 +76,11 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: Column(
               children: [
                 _buildLogo(),
-                const SizedBox(height: 40),
+                const SizedBox(height: 4),
                 _buildCard(),
               ],
             ),
@@ -94,25 +94,15 @@ class _LoginScreenState extends State<LoginScreen> {
     return Column(
       children: [
         Image.asset(
-          'assets/images/__TDS LOGO (Color).png',
-          height: 72,
+          'assets/images/__TDS_LOGO_White.png',
+          height: 160,
           errorBuilder: (_, __, ___) => const Icon(
             Icons.shield_rounded,
-            size: 72,
-            color: AppColors.coreGreen,
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'TDS Sentinel',
-          style: TextStyle(
+            size: 160,
             color: AppColors.white,
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         const Text(
           'Plataforma de Evaluación de Riesgo',
           style: TextStyle(color: Colors.white54, fontSize: 13),

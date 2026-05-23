@@ -6,7 +6,25 @@
       "Bash(# El problema: Flask corre con debug+reloader \\(2 procesos\\), *)",
       "Read(//vscode/bin/linux-x64/f6cfa2ea2403534de03f069bdf160d06451ed282/bin/helpers/**)",
       "Bash(pkill -f \"app.py\")",
-      "Bash(FLASK_DEBUG=false nohup /workspaces/tds-sentinel-mvp/.venv/bin/python -c ' *)"
+      "Bash(FLASK_DEBUG=false nohup /workspaces/tds-sentinel-mvp/.venv/bin/python -c ' *)",
+      "Bash(ls /sdks/)",
+      "Bash(ls /sdk/)",
+      "Bash(find / -maxdepth 8 -name \"flutter\")",
+      "Bash(zsh -c \"which flutter\")",
+      "Bash(zsh -c \"flutter --version\")",
+      "Read(//opt/**)",
+      "Bash(bash -l -c \"which flutter\")",
+      "Read(//etc/**)",
+      "Read(//etc/profile.d/**)",
+      "Bash(ls /sdks)",
+      "Bash(ls /sdk)",
+      "Bash(\n# Revisar todos los procesos en el sistema para ver si flutter alguna vez se ejecutó\ncat /proc/*/cmdline 2>/dev/null | tr '\\\\0' ' ' | grep -i flutter | head -5 || true\n\n# Ver el history de bash/ash\ncat /home/vscode/.bash_history 2>/dev/null | grep flutter | tail -10\ncat /root/.bash_history 2>/dev/null | grep flutter | tail -10\ncat /home/vscode/.zsh_history 2>/dev/null | grep flutter | tail -5 || true\n\n# Últimas líneas del postCreateCommand log \\(si existe en algún lugar\\)\ncat /tmp/*.log 2>/dev/null | grep -i flutter | tail -5 || true\n\n# Revisar la estructura del proyecto flutter para ver si el build ya existe\nls /workspaces/tds-sentinel-mvp/mobile/sentinel_mobile/build/web/ 2>/dev/null | head -10\n)",
+      "Read(//proc/**)",
+      "Bash(apk info *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('generator',''\\)\\)\")",
+      "Bash(apk list *)",
+      "Bash(ls /docker-entrypoint.d/)",
+      "Bash(ls /entrypoint.d/)"
     ]
   }
 }

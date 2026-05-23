@@ -96,19 +96,19 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         Image.asset(
           'assets/images/__TDS_LOGO_White.png',
-          height: 110,
+          height: 190,
           errorBuilder: (_, __, ___) => const Icon(
             Icons.shield_rounded,
-            size: 110,
+            size: 190,
             color: AppColors.white,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         const Text(
           'Sentinel',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 38,
+            fontSize: 30,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.5,
           ),

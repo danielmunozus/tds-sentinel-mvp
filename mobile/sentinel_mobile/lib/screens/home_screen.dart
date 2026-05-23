@@ -120,20 +120,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final client = AppState.instance.client;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 16, 20),
+      padding: const EdgeInsets.fromLTRB(18, 14, 14, 16),
       child: Row(
         children: [
           Image.asset(
             'assets/icons/__TDS ICON (Color).png',
-            height: 36,
+            height: 32,
             errorBuilder: (_, __, ___) => Container(
-              width: 36, height: 36,
+              width: 32, height: 32,
               decoration: BoxDecoration(
                 color: AppColors.coreGreen,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.shield_rounded,
-                  color: AppColors.white, size: 20),
+                  color: AppColors.white, size: 18),
             ),
           ),
           const SizedBox(width: 10),
@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(color: AppColors.white,
                       fontSize: 16, fontWeight: FontWeight.w700)),
                 Text(client?.companyName ?? '',
-                  style: const TextStyle(color: Colors.white60, fontSize: 11),
+                  style: const TextStyle(color: Colors.white60, fontSize: 15),
                   overflow: TextOverflow.ellipsis),
               ],
             ),
